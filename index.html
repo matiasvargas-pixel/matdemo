@@ -2814,6 +2814,16 @@ button:active{
 .an-mv small{margin-left:3px;font-weight:900}
 .an-bd{position:absolute;top:2px;right:2px;z-index:5;min-width:18px;height:18px;border-radius:9px;color:#111;font:900 10px/18px sans-serif;text-align:center}
 .an-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:700;background:#14b8a6;color:#06231f;padding:10px 18px;border-radius:9px;font-weight:800;font-size:13px}
+#resultOverlay .modal{position:relative}
+#resultOverlay .result-x{position:absolute;top:10px;right:10px;width:32px;height:32px;min-width:0;padding:0;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;color:#c5d0d8;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center}
+#resultOverlay .result-x:hover{background:rgba(255,255,255,.18);color:#fff}
+.an-warn{color:#f6c23e;border-color:rgba(246,194,62,.4);font-size:12px;line-height:1.5}
+.an-opt{display:flex;gap:7px;align-items:flex-start;margin-top:8px;font-size:11px;line-height:1.4;color:#aab8c3;cursor:pointer}
+.an-opt input{margin-top:1px;flex:none}
+.an-pv{display:flex;gap:8px;align-items:baseline;padding:6px 0;border-top:1px solid rgba(255,255,255,.06);font-size:12px;line-height:1.5}
+.an-pv b{flex:none;min-width:48px;font-variant-numeric:tabular-nums;color:#fff}
+.an-pv .an-d{flex:none;color:#657580;font-size:10px}
+.an-pv .an-t{color:#c5d0d8;word-break:break-word}
 @media(max-width:900px){.an-main{grid-template-columns:1fr}.an-left{position:static;max-width:none}}
 </style>
 </head>
@@ -4047,6 +4057,8 @@ button:active{
 >
 
     <div class="modal">
+
+        <button id="resultClose" type="button" class="result-x" aria-label="Cerrar" title="Cerrar">✕</button>
 
         <div
             id="resultIcon"
@@ -11116,9 +11128,14 @@ boardElement.addEventListener("pointerdown", function(event){
     <textarea id="anText" placeholder="1. e4 e5 2. Nf3 Nc6 ...&#10;o un FEN: rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1"></textarea>
     <div class="an-row"><button id="anGo" class="primary">Cargar y analizar</button><button id="anEx" class="draw">Ejemplo</button></div>
     <div class="an-err" id="anErr"></div></div>
+   <div class="an-card an-warn" id="anWarn" hidden></div>
    <div class="an-card"><div class="card-title">Análisis con Stockfish</div>
     <div class="an-row" style="margin-top:0"><select id="anSpeed"><option value="200,10">Rápido</option><option value="500,14" selected>Normal</option><option value="1200,18">Profundo</option></select><button id="anRun" class="an-accent">Analizar</button></div>
+    <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones y errores con mayor profundidad</span></label>
     <div class="progress"><div id="anProg" class="progress-fill" style="width:0"></div></div><div class="an-info" id="anInfo">Listo para analizar.</div></div>
+   <div class="an-card" id="anPos"><div class="card-title">Posición actual</div>
+    <div class="an-row" style="margin-top:0"><button id="anDeep" class="an-accent" style="flex:1">🔎 Análisis profundo · 3 líneas</button></div>
+    <div class="an-info" id="anDeepInfo" style="margin:8px 0 4px"></div><div id="anDeepLines"></div></div>
    <div class="an-card" id="anSum" hidden></div>
    <div class="an-card"><div class="card-title">Jugadas</div><div id="anMoves" class="an-moves"></div></div>
   </div>
@@ -11135,10 +11152,50 @@ const MC=(()=>{
 const F="abcdefgh",D={N:[[1,2],[2,1],[-1,2],[-2,1],[1,-2],[2,-1],[-1,-2],[-2,-1]],K:[[1,0],[-1,0],[0,1],[0,-1],[1,1],[1,-1],[-1,1],[-1,-1]]};
 const SL={B:[[1,1],[1,-1],[-1,1],[-1,-1]],R:[[1,0],[-1,0],[0,1],[0,-1]]};SL.Q=SL.B.concat(SL.R);
 const sq=i=>F[i&7]+(8-(i>>3)),col=q=>q===q.toUpperCase()?"w":"b",ok=(r,c)=>r>=0&&r<8&&c>=0&&c<8;
-function fromFEN(f){const p=f.trim().split(/\s+/),b=[];
- for(const ch of (p[0]||"").replace(/\//g,""))if(/\d/.test(ch))for(let i=0;i<+ch;i++)b.push(null);else b.push(ch);
- if(b.length!==64||b.filter(x=>x==="K").length!==1||b.filter(x=>x==="k").length!==1)throw new Error("FEN no válido.");
- return{b,t:p[1]==="b"?"b":"w",c:p[2]||"-",e:p[3]&&p[3]!=="-"?F.indexOf(p[3][0])+(8-p[3][1])*8:-1,h:+p[4]||0,n:+p[5]||1}}
+function validateFEN(fen){
+ const bad=m=>({ok:false,error:m}),notes=[];
+ if(typeof fen!=="string"||!fen.trim())return bad("El FEN está vacío.");
+ const p=fen.trim().split(/\s+/);
+ if(p.length<4)return bad("El FEN está incompleto: necesita al menos 4 campos (piezas, turno, enroques y captura al paso).");
+ if(p.length>6)return bad("El FEN tiene demasiados campos ("+p.length+"); el máximo son 6.");
+ const rows=p[0].split("/");
+ if(rows.length!==8)return bad("El tablero debe tener 8 filas separadas por «/» y tiene "+rows.length+".");
+ const b=[];
+ for(let r=0;r<8;r++){const rk=8-r;let n=0,pd=false;
+  for(const ch of rows[r]){
+   if(ch>="1"&&ch<="8"){if(pd)return bad("Fila "+rk+": hay dos números seguidos («"+rows[r]+"»).");pd=true;for(let i=0;i<+ch;i++)b.push(null);n+=+ch}
+   else if("prnbqkPRNBQK".includes(ch)){pd=false;b.push(ch);n++}
+   else return bad("Fila "+rk+": el carácter «"+ch+"» no es válido (solo piezas prnbqk/PRNBQK y números del 1 al 8).");
+   if(n>8)return bad("Fila "+rk+": tiene más de 8 casillas («"+rows[r]+"»).")}
+  if(n!==8)return bad("Fila "+rk+": tiene "+n+" casillas en lugar de 8 («"+rows[r]+"»).")}
+ const wk=[],bk=[];b.forEach((q,i)=>{if(q==="K")wk.push(i);else if(q==="k")bk.push(i)});
+ if(wk.length!==1)return bad(wk.length?"Hay "+wk.length+" reyes blancos; debe haber exactamente 1.":"Falta el rey blanco.");
+ if(bk.length!==1)return bad(bk.length?"Hay "+bk.length+" reyes negros; debe haber exactamente 1.":"Falta el rey negro.");
+ if(Math.abs((wk[0]>>3)-(bk[0]>>3))<=1&&Math.abs((wk[0]&7)-(bk[0]&7))<=1)return bad("Los reyes están pegados ("+sq(wk[0])+" y "+sq(bk[0])+"): posición imposible.");
+ for(let i=0;i<64;i++)if((i<8||i>=56)&&(b[i]==="P"||b[i]==="p"))return bad("Hay un peón en "+sq(i)+": los peones no pueden estar en la fila 1 ni en la 8.");
+ if(p[1]!=="w"&&p[1]!=="b")return bad("El turno debe ser «w» (blancas) o «b» (negras), no «"+p[1]+"».");
+ const t=p[1];
+ if(att(b,t==="w"?bk[0]:wk[0],t))return bad("El rey de las "+(t==="w"?"negras":"blancas")+" está en jaque pero le toca mover a las "+(t==="w"?"blancas":"negras")+": posición imposible.");
+ const cf=p[2];
+ if(!/^(-|[KQkq]+)$/.test(cf))return bad("Los enroques «"+cf+"» no son válidos (usa K, Q, k, q o «-»).");
+ const CN={K:"corto de las blancas",Q:"largo de las blancas",k:"corto de las negras",q:"largo de las negras"};
+ let c="";
+ for(const[ch,kg,rk,ki,ri]of[["K","K","R",60,63],["Q","K","R",60,56],["k","k","r",4,7],["q","k","r",4,0]]){
+  if(!cf.includes(ch))continue;
+  if(b[ki]===kg&&b[ri]===rk)c+=ch;else notes.push("Se quitó el enroque "+CN[ch]+": el rey o la torre no están en su casilla inicial.")}
+ if(!c)c="-";
+ let e=-1;const ef=p[3];
+ if(ef!=="-"){
+  if(!/^[a-h][1-8]$/.test(ef))return bad("La casilla de captura al paso «"+ef+"» no es válida (usa «-» o una casilla como e3 o e6).");
+  const rk=+ef[1],ix=(8-rk)*8+F.indexOf(ef[0]);
+  const okp=t==="w"?(rk===6&&!b[ix]&&b[ix+8]==="p"&&!b[ix-8]):(rk===3&&!b[ix]&&b[ix-8]==="P"&&!b[ix+8]);
+  if(okp)e=ix;else notes.push("Se quitó la captura al paso «"+ef+"»: no es coherente con la posición.")}
+ let h=0,n=1;
+ if(p.length>4){if(/^\d+$/.test(p[4]))h=+p[4];else notes.push("El contador de medias jugadas «"+p[4]+"» no es válido; se usó 0.")}
+ if(p.length>5){if(/^\d+$/.test(p[5])&&+p[5]>=1)n=+p[5];else notes.push("El número de jugada «"+p[5]+"» no es válido; se usó 1.")}
+ const state={b,t,c,e,h,n};
+ return{ok:true,fen:toFEN(state),state,notes}}
+function fromFEN(f){const r=validateFEN(f);if(!r.ok)throw new Error("FEN no válido: "+r.error);r.state.notes=r.notes;return r.state}
 function toFEN(s){const o=[];for(let r=0;r<8;r++){let x="",z=0;for(let c=0;c<8;c++){const q=s.b[r*8+c];if(q){x+=(z||"")+q;z=0}else z++}o.push(x+(z||""))}
  return o.join("/")+" "+s.t+" "+(s.c||"-")+" "+(s.e<0?"-":sq(s.e))+" "+s.h+" "+s.n}
 function att(b,s0,by){const r=s0>>3,c=s0&7,own=x=>x&&col(x)===by,up=by==="w"?1:-1;
@@ -11184,18 +11241,49 @@ function parse(s,txt,L){const t=txt.replace(/[+#!?]/g,"").replace(/0/g,"O");
   r=L.find(m=>m.to===T&&s.b[m.f].toUpperCase()===(x[1]||"P")&&(!x[2]||F[m.f&7]===x[2])&&(!x[3]||8-(m.f>>3)==x[3])&&(m.p||"").toUpperCase()===(x[5]||"").toUpperCase());if(r)return r}
  x=t.match(/^([a-h][1-8])([a-h][1-8])([qrbn])?$/i);
  if(x)return L.find(m=>sq(m.f)===x[1]&&sq(m.to)===x[2]&&(m.p||"")===(x[3]||"").toLowerCase())}
-return{fromFEN,toFEN,legal,inCheck,san,parse,make,uci:m=>sq(m.f)+sq(m.to)+(m.p||"")}})();
+return{fromFEN,validateFEN,toFEN,legal,inCheck,san,parse,make,uci:m=>sq(m.f)+sq(m.to)+(m.p||"")}})();
+
+/* ---------- Normalizador PGN ----------
+   Admite cabeceras en una sola línea, "1. ... e5" / "1... e5" / "1…e5", resultado ½-½,
+   comentarios, variantes y NAG. Separa varias partidas si las hay. */
+const RES_RE=/^(1-0|0-1|1\/2-1\/2|\*)$/;
+const normRes=r=>{r=String(r||"").replace(/½/g,"1/2").replace(/[\u2013\u2014\u2212]/g,"-").replace(/\s+/g,"");return RES_RE.test(r)?r:""};
+function normalizePGN(raw){
+ const t=String(raw==null?"":raw).replace(/^\uFEFF/,"").replace(/\r\n?/g,"\n").replace(/^%.*$/gm,"");
+ const TAG=/\[\s*([A-Za-z0-9_]+)\s+"((?:[^"\\\n]|\\.)*)"\s*\]/g,games=[];
+ let cur={H:{},txt:""},last=0,m;
+ while((m=TAG.exec(t))){
+  cur.txt+=t.slice(last,m.index);last=m.index+m[0].length;
+  if(/\S/.test(cur.txt)){games.push(cur);cur={H:{},txt:""}}
+  const k=m[1];if(!(k in cur.H))cur.H[k]=m[2].replace(/\\(["\\])/g,"$1")}
+ cur.txt+=t.slice(last);
+ if(Object.keys(cur.H).length||/\S/.test(cur.txt))games.push(cur);
+ let extra=0;
+ for(const g of games){
+  const x=g.txt.replace(/\{[^}]*\}/g," ").replace(/;[^\n]*/g," ");
+  let d=0,o="";for(const ch of x){if(ch==="(")d++;else if(ch===")")d=Math.max(0,d-1);else if(!d)o+=ch}
+  o=o.replace(/\$\d+/g," ").replace(/[\u2013\u2014\u2212]/g,"-").replace(/\u2026/g,"...").replace(/½/g,"1/2").replace(/\u00a0/g," ")
+   .replace(/\be\.p\./gi," ").replace(/(^|\s)\d+\s*\.+/g,"$1 ").replace(/\.{2,}/g," ");
+  const chunks=[];let c=[];
+  for(const w of o.split(/\s+/).filter(Boolean)){c.push(w);if(RES_RE.test(w)){chunks.push(c);c=[]}}
+  if(c.length)chunks.push(c);
+  const first=chunks[0]||[];let res="";
+  if(first.length&&RES_RE.test(first[first.length-1]))res=first.pop();
+  g.tokens=first;g.res=res||normRes(g.H.Result)||"*";
+  extra+=chunks.slice(1).filter(ch=>ch.filter(w=>!RES_RE.test(w)).length>=2).length}
+ return{games,total:games.length+extra}}
 
 /* ---------- Texto (PGN / FEN) -> partida ---------- */
-function loadText(txt){txt=txt.trim();if(!txt)throw new Error("Pega un PGN o un FEN.");
- const H={};let body=txt.replace(/^\s*\[(\w+)\s+"([^"]*)"\]\s*$/gm,(a,k,v)=>{if(!(k in H))H[k]=v;return""});
- const g={H,res:"*",moves:[]};
- if(!/\[/.test(txt)&&/^[rnbqkpRNBQKP1-8]+(\/[rnbqkpRNBQKP1-8]+){7}\s+[wb]\b/.test(txt)){g.states=[MC.fromFEN(txt)];return g}
- let s=MC.fromFEN(H.FEN||START);g.states=[s];
- body=body.replace(/\{[^}]*\}/g," ").replace(/;[^\n]*/g," ").replace(/\$\d+/g," ");
- let d=0,o="";for(const ch of body){if(ch==="(")d++;else if(ch===")")d=Math.max(0,d-1);else if(!d)o+=ch}
- for(const tk of o.replace(/\d+\.(\.\.)?/g," ").split(/\s+/).filter(Boolean)){
-  if(/^(1-0|0-1|1\/2-1\/2|\*)$/.test(tk)){g.res=tk;break}
+function loadText(txt){txt=String(txt||"").trim();if(!txt)throw new Error("Pega un PGN o un FEN.");
+ const g={H:{},res:"*",moves:[],warn:[]},w0=txt.split(/\s+/)[0];
+ if(!/\[/.test(txt)&&w0.includes("/")&&/^[prnbqkPRNBQK1-9\/]+$/.test(w0)){const s=MC.fromFEN(txt);g.states=[s];g.warn=(s.notes||[]).slice();return g}
+ const P=normalizePGN(txt);
+ if(!P.games.length)throw new Error("No se encontró ninguna partida en el texto.");
+ const G=P.games[0];g.H=G.H;g.res=G.res;
+ let s;try{s=MC.fromFEN(G.H.FEN||START)}catch(e){throw new Error("La cabecera FEN del PGN no es válida. "+e.message.replace(/^FEN no válido:\s*/,""))}
+ g.states=[s];g.warn=(s.notes||[]).slice();
+ if(P.total>1)g.warn.push("El texto contiene "+P.total+" partidas. Solo se analiza la primera.");
+ for(const tk of G.tokens){
   const L=MC.legal(s),m=MC.parse(s,tk,L);
   if(!m)throw new Error('Jugada no válida: "'+tk+'" (después de '+g.moves.length+' jugadas).');
   g.moves.push({uci:MC.uci(m),san:MC.san(s,m,L),col:s.t,n:s.n,f:m.f,to:m.to});s=MC.make(s,m);g.states.push(s)}
@@ -11204,7 +11292,7 @@ function loadText(txt){txt=txt.trim();if(!txt)throw new Error("Pega un PGN o un 
 /* ---------- Exportar FEN / PGN de la partida actual ---------- */
 const curFEN=()=>{const p=boardToFEN().split(" ");p[4]=String(halfMoveClock);return p.join(" ")};
 function result(){if(!gameOver)return"*";const t=(resultTitle.textContent+" "+resultText.textContent).toLowerCase();
- if(t.includes("tablas"))return"1/2-1/2";if(/blancas ganan/.test(t))return"1-0";if(/negras ganan/.test(t))return"0-1";
+ if(t.includes("tablas")||t.includes("½"))return"1/2-1/2";if(/blancas ganan/.test(t))return"1-0";if(/negras ganan/.test(t))return"0-1";
  if(t.includes("has ganado"))return playerColor==="w"?"1-0":"0-1";if(t.includes("matchess gana"))return playerColor==="w"?"0-1":"1-0";return"*"}
 function buildPGN(){const you=username||"Jugador",bot="MATCHESS (Nivel "+currentLevel+")",res=result();
  const nm=c=>mode==="bot"?(playerColor===c?you:bot):(c==="w"?"Jugador 1":"Jugador 2");
@@ -11213,7 +11301,8 @@ function buildPGN(){const you=username||"Jugador",bot="MATCHESS (Nivel "+current
  let s=MC.fromFEN(START);const out=[];
  moveLog.forEach((u,i)=>{const L=MC.legal(s),m=MC.parse(s,u,L);if(!m)return;out.push((s.t==="w"?s.n+". ":(i===0?s.n+"... ":""))+MC.san(s,m,L));s=MC.make(s,m)});
  const lines=[];let ln="";for(const w of(out.join(" ")+" "+res).split(" ")){if((ln+" "+w).trim().length>80){lines.push(ln);ln=w}else ln=(ln+" "+w).trim()}lines.push(ln);
- return H.map(h=>"["+h[0]+' "'+h[1]+'"]').join("\n")+"\n\n"+lines.join("\n")}
+ const q=v=>String(v).replace(/[\r\n\t]+/g," ").replace(/\\/g,"\\\\").replace(/"/g,'\\"');
+ return H.map(h=>"["+h[0]+' "'+q(h[1])+'"]').join("\n")+"\n\n"+lines.join("\n")}
 function toast(t){const e=document.createElement("div");e.className="an-toast";e.textContent=t;document.body.appendChild(e);setTimeout(()=>e.remove(),1800)}
 async function copy(t,label){try{await navigator.clipboard.writeText(t)}catch(e){const a=document.createElement("textarea");a.value=t;document.body.appendChild(a);a.select();try{document.execCommand("copy")}catch(_){}a.remove()}toast(label+" copiado ✓")}
 
@@ -11226,31 +11315,136 @@ $("mvMenu").onclick=e=>{const a=e.target.closest("button");if(!a||a.disabled)ret
 /* ---------- Analizador con Stockfish (worker propio) ---------- */
 const CL={best:["★","#96bc4b","Mejor"],exc:["!","#8fc65a","Excelente"],good:["✓","#a4b4a0","Bueno"],inac:["?!","#f6c23e","Imprecisión"],mist:["?","#f08a24","Error"],blun:["??","#e04848","Error grave"]};
 const wp=cp=>50+50*(2/(1+Math.exp(-.00368208*Math.max(-1500,Math.min(1500,cp))))-1);
-let an={g:null,ply:0,ev:[],cl:[],flip:false},anW=null,anRun=0,anBack=false;
-const emptyG=()=>({H:{},res:"*",moves:[],states:[MC.fromFEN(START)]});
-function anStop(){anRun++;if(anW){anW.terminate();anW=null}}
-function engine(){return new Promise((res,rej)=>{try{const w=new Worker("stockfish/stockfish-19-lite-single.js"),to=setTimeout(()=>{w.terminate();rej(new Error("Stockfish no respondió."))},9000);
- w.onerror=()=>{clearTimeout(to);rej(new Error("No se pudo cargar Stockfish."))};
- w.onmessage=e=>{const l=typeof e.data==="string"?e.data:"";if(l==="uciok")w.postMessage("isready");else if(l==="readyok"){clearTimeout(to);w.onmessage=null;res(w)}};w.postMessage("uci")}catch(e){rej(e)}})}
-function search(w,fen,depth,ms){return new Promise((res,rej)=>{let b=null;const to=setTimeout(()=>rej(new Error("Stockfish tardó demasiado.")),ms+8000);
+const SF_URL="stockfish/stockfish-19-lite-single.js",DEEP_D=24,DEEP_MS=15000,BAD=/inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
+const newAn=g=>({g,ply:0,ev:[],cl:[],flip:false,deep:{},p2:null});
+let an=newAn(null),anW=null,anRun=0,anBack=false,deepRun=0,deepBusy=false,deepCur=null,gameBusy=false;
+const anWs=new Set(),pend=new Set();
+const emptyG=()=>({H:{},res:"*",moves:[],states:[MC.fromFEN(START)],warn:[]});
+const mkErr=(m,c)=>{const e=new Error(m);e.cancelled=!!c;return e};
+const prog=x=>{$("anProg").style.width=x+"%"};
+
+/* Gestión de workers: nunca hay más de uno vivo, y todo worker se termina
+   al acabar, al cancelar, al fallar o al agotar el tiempo. */
+function killW(w){if(!w)return;
+ try{w.onmessage=null;w.onerror=null;w.terminate()}catch(_){}
+ anWs.delete(w);if(anW===w)anW=null;
+ for(const p of[...pend])if(p.w===w){pend.delete(p);p.cancel()}}
+function killAll(){for(const w of[...anWs])killW(w);anW=null}
+function anStop(){anRun++;deepRun++;gameBusy=false;if(deepBusy&&deepCur)deepCur.d.state="stop";deepBusy=false;deepCur=null;killAll();anBtns()}
+function engine(){return new Promise((res,rej)=>{killAll();let w;
+ try{w=new Worker(SF_URL)}catch(e){rej(e);return}
+ anWs.add(w);anW=w;
+ let to;const p={w,cancel:()=>{clearTimeout(to);rej(mkErr("Análisis cancelado.",1))}};
+ const done=()=>{clearTimeout(to);pend.delete(p)};
+ to=setTimeout(()=>{done();killW(w);rej(mkErr("Stockfish no respondió."))},9000);pend.add(p);
+ w.onerror=()=>{done();killW(w);rej(mkErr("No se pudo cargar Stockfish."))};
  w.onmessage=e=>{const l=typeof e.data==="string"?e.data:"";
-  if(l.startsWith("info")&&l.includes(" score ")&&!/bound/.test(l)){const sc=l.match(/score (cp|mate) (-?\d+)/),pv=l.match(/ pv (.+)$/);if(sc)b={k:sc[1],v:+sc[2],pv:pv?pv[1].split(" "):[]}}
-  else if(l.startsWith("bestmove")){clearTimeout(to);res({...(b||{k:"cp",v:0,pv:[]}),bm:l.split(" ")[1]})}};
- w.postMessage("position fen "+fen);w.postMessage("go depth "+depth+" movetime "+ms)})}
-function classify(i){const e0=an.ev[i],e1=an.ev[i+1],m=an.g.moves[i],a=wp(e0.cp),b=wp(e1.cp),loss=Math.max(0,m.col==="w"?a-b:b-a);
+  if(l==="uciok")w.postMessage("isready");
+  else if(l==="readyok"){done();w.onmessage=null;w.onerror=null;res(w)}};
+ w.postMessage("uci")})}
+/* opt.multi = nº de líneas (MultiPV); opt.onInfo = callback con las líneas parciales */
+function search(w,fen,depth,ms,opt){opt=opt||{};return new Promise((res,rej)=>{
+ const chk=MC.validateFEN(fen);
+ if(!chk.ok){rej(mkErr("FEN no válido, no se envía a Stockfish: "+chk.error));return}
+ const lines=[];let to;
+ const p={w,cancel:()=>{clearTimeout(to);rej(mkErr("Análisis cancelado.",1))}};
+ const done=()=>{clearTimeout(to);pend.delete(p)};
+ to=setTimeout(()=>{done();killW(w);rej(mkErr("Stockfish tardó demasiado."))},ms+8000);pend.add(p);
+ w.onerror=()=>{done();killW(w);rej(mkErr("Stockfish falló durante el análisis."))};
+ w.onmessage=e=>{const l=typeof e.data==="string"?e.data:"";
+  if(l.startsWith("info")&&l.includes(" score ")&&!/bound/.test(l)){
+   const sc=l.match(/score (cp|mate) (-?\d+)/),pv=l.match(/ pv (.+)$/),dm=l.match(/ depth (\d+)/),mp=l.match(/ multipv (\d+)/);
+   if(sc){lines[(mp?+mp[1]:1)-1]={k:sc[1],v:+sc[2],pv:pv?pv[1].trim().split(" "):[],depth:dm?+dm[1]:0};if(opt.onInfo)opt.onInfo(lines.slice())}}
+  else if(l.startsWith("bestmove")){done();res({lines:lines.filter(Boolean),bm:l.split(" ")[1]})}};
+ w.postMessage("setoption name MultiPV value "+Math.max(1,opt.multi||1));
+ w.postMessage("position fen "+chk.fen);
+ w.postMessage("go depth "+depth+" movetime "+ms)})}
+const lineE=(L,sg)=>({cp:(L.k==="mate"?(L.v>0?1:-1)*(1e4-Math.abs(L.v)):L.v)*sg,mate:L.k==="mate"?L.v*sg:null,pv:L.pv,depth:L.depth});
+async function evalPos(w,s,dp,ms){
+ if(!MC.legal(s).length){const ck=MC.inCheck(s);return{cp:ck?(s.t==="w"?-1e4:1e4):0,mate:ck?0:null,pv:[],term:1,depth:0}}
+ const r=await search(w,MC.toFEN(s),dp,ms),L=r.lines[0]||{k:"cp",v:0,pv:[],depth:0},e=lineE(L,s.t==="w"?1:-1);
+ if(!e.pv.length)e.pv=[r.bm];e.bm=r.bm;return e}
+function classify(e0,e1,m){const a=wp(e0.cp),b=wp(e1.cp),loss=Math.max(0,m.col==="w"?a-b:b-a);
  const k=(loss<=.5||e0.bm===m.uci)?"best":loss<=2?"exc":loss<=5?"good":loss<=10?"inac":loss<=20?"mist":"blun";
  return{k,acc:Math.max(0,Math.min(100,103.1668*Math.exp(-.04354*loss)-3.1669))}}
-async function anAnalyze(){anStop();const my=++anRun,g=an.g,[ms,dp]=$("anSpeed").value.split(",").map(Number);
- an.ev=[];an.cl=[];$("anInfo").textContent="Iniciando Stockfish…";$("anProg").style.width="0";anRender();
- try{const w=anW=await engine();
-  for(let i=0;i<g.states.length;i++){if(my!==anRun)return;const s=g.states[i];let e;
-   if(!MC.legal(s).length){const ck=MC.inCheck(s);e={cp:ck?(s.t==="w"?-1e4:1e4):0,mate:ck?0:null,pv:[]}}
-   else{const r=await search(w,MC.toFEN(s),dp,ms),sg=s.t==="w"?1:-1;
-    e={cp:(r.k==="mate"?(r.v>0?1:-1)*(1e4-Math.abs(r.v)):r.v)*sg,mate:r.k==="mate"?r.v*sg:null,pv:r.pv.length?r.pv:[r.bm],bm:r.bm}}
-   if(my!==anRun)return;an.ev[i]=e;if(i>0)an.cl[i-1]=classify(i-1);
-   $("anProg").style.width=(100*(i+1)/g.states.length)+"%";$("anInfo").textContent="Analizando posición "+(i+1)+" de "+g.states.length+"…";anRender()}
-  $("anInfo").textContent="Análisis completo ✓";anW.terminate();anW=null}
- catch(e){if(my===anRun)$("anInfo").textContent="Error: "+e.message}}
+const cls=(A,i)=>classify(A.ev[i],A.ev[i+1],A.g.moves[i]);
+
+async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
+ const[ms,dp]=$("anSpeed").value.split(",").map(Number),two=$("anTwo").checked;
+ gameBusy=true;anBtns();
+ A.ev=[];A.cl=[];A.p2=null;$("anInfo").textContent="Iniciando Stockfish…";prog(0);anRender();
+ let w=null;
+ try{
+  w=await engine();
+  const N=g.states.length,share=two?70:100;
+  for(let i=0;i<N;i++){
+   if(my!==anRun)return;
+   const e=await evalPos(w,g.states[i],dp,ms);
+   if(my!==anRun)return;
+   A.ev[i]=e;if(i>0)A.cl[i-1]=cls(A,i-1);
+   prog(share*(i+1)/N);$("anInfo").textContent="Analizando posición "+(i+1)+" de "+N+(e.depth?" · prof. "+e.depth:"")+"…";anRender()}
+  let tail="";
+  if(two){
+   /* Segunda pasada: solo las posiciones (antes y después) de imprecisiones, errores y errores graves. */
+   const badMoves=[],set=new Set();
+   A.cl.forEach((c,i)=>{if(c&&BAD.test(c.k)){badMoves.push(i);set.add(i);set.add(i+1)}});
+   const list=[...set].sort((a,b)=>a-b).filter(i=>!A.ev[i].term),dp2=dp+6,ms2=ms*3,before=new Map(badMoves.map(i=>[i,A.cl[i].k]));
+   A.p2={dp:dp2,total:list.length,done:0,changed:0};
+   try{
+    for(let k=0;k<list.length;k++){
+     const i=list[k];
+     $("anInfo").textContent="Segunda pasada: posición "+(k+1)+" de "+list.length+" · objetivo prof. "+dp2+"…";
+     const e=await evalPos(w,g.states[i],dp2,ms2);
+     if(my!==anRun)return;
+     e.pass=2;e.d1=A.ev[i].depth;A.ev[i]=e;A.p2.done=k+1;
+     for(const j of[i-1,i])if(before.has(j)&&DONE2(A.ev[j])&&DONE2(A.ev[j+1]))A.cl[j]=cls(A,j);
+     prog(70+30*(k+1)/list.length);anRender()}
+   }catch(e){if(e.cancelled||my!==anRun)throw e;tail=" · la segunda pasada se interrumpió: "+e.message}
+   A.p2.changed=badMoves.filter(i=>A.cl[i].k!==before.get(i)).length;
+   if(!tail)tail=list.length?" · 2ª pasada: "+list.length+" posiciones a mayor profundidad":" · sin imprecisiones ni errores que revisar"}
+  prog(100);$("anInfo").textContent="Análisis completo ✓"+tail;anRender()}
+ catch(e){if(my===anRun&&!e.cancelled)$("anInfo").textContent="Error: "+e.message}
+ finally{killW(w);if(my===anRun){gameBusy=false;anBtns()}}}
+
+/* ---------- Posición actual: análisis profundo con 3 líneas (MultiPV) ---------- */
+function anBtns(){const b=$("anDeep");b.disabled=gameBusy||!an.g;b.textContent=deepBusy?"⏹ Detener análisis":"🔎 Análisis profundo · 3 líneas"}
+function pvNum(s,pv,max){const o=[];let first=true;for(const u of pv.slice(0,max)){const L=MC.legal(s),m=MC.parse(s,u,L);if(!m)break;
+ o.push((s.t==="w"?s.n+". ":(first?s.n+"… ":""))+MC.san(s,m,L));s=MC.make(s,m);first=false}return o.join(" ")}
+function deepRender(){const I=$("anDeepInfo"),B=$("anDeepLines");anBtns();
+ if(!an.g){B.innerHTML="";I.textContent="";return}
+ const d=an.deep[an.ply],s=an.g.states[an.ply];
+ if(!d){B.innerHTML="";I.textContent=gameBusy?"Disponible cuando termine el análisis de la partida.":"Analiza la posición del tablero con más profundidad y 3 líneas (MultiPV).";return}
+ B.innerHTML=d.lines.map(l=>'<div class="an-pv"><b>'+fmt(l)+'</b><span class="an-d">prof. '+l.depth+'</span><span class="an-t">'+pvNum(s,l.pv,10)+"</span></div>").join("");
+ const pd=d.depth?"profundidad alcanzada: "+d.depth:"";
+ I.textContent=d.term?"Posición final: no hay jugadas legales ("+(d.term==="mate"?"jaque mate":"ahogado")+").":
+  d.state==="run"?(d.lines.length?"Analizando… "+pd:"Iniciando Stockfish…"):
+  d.state==="done"?"Análisis profundo completo ✓ · "+pd:
+  d.state==="err"?"Error: "+d.err+(pd?" · "+pd:""):
+  "Detenido"+(pd?" · "+pd:"")}
+async function anDeep(){
+ if(deepBusy){deepStop();return}
+ if(!an.g||gameBusy)return;
+ const A=an,ply=A.ply,s=A.g.states[ply],my=++deepRun,leg=MC.legal(s);
+ if(!leg.length){A.deep[ply]={lines:[],depth:0,state:"done",term:MC.inCheck(s)?"mate":"stalemate"};deepRender();return}
+ const d=A.deep[ply]={lines:[],depth:0,state:"run"};deepCur={d};deepBusy=true;deepRender();
+ let w=null;
+ try{
+  w=await engine();if(my!==deepRun)return;
+  const sg=s.t==="w"?1:-1,set=ls=>{d.lines=ls.map(L=>lineE(L,sg));d.depth=Math.max(0,...d.lines.map(l=>l.depth))};
+  const r=await search(w,MC.toFEN(s),DEEP_D,DEEP_MS,{multi:Math.min(3,leg.length),onInfo:ls=>{if(my!==deepRun)return;set(ls.filter(Boolean));if(an===A&&an.ply===ply)deepRender()}});
+  if(my!==deepRun)return;
+  set(r.lines);d.state="done"}
+ catch(e){if(my===deepRun&&!e.cancelled){d.state="err";d.err=e.message}}
+ finally{killW(w);if(my===deepRun){deepBusy=false;deepCur=null}if(an===A)deepRender()}}
+function deepStop(){if(!deepBusy)return;deepRun++;if(deepCur)deepCur.d.state="stop";deepBusy=false;deepCur=null;killAll();deepRender()}
+function setWarn(w){const e=$("anWarn");e.textContent="";if(!w||!w.length){e.hidden=true;return}e.hidden=false;
+ w.forEach(t=>{const d=document.createElement("div");d.textContent="⚠ "+t;e.appendChild(d)})}
+function depthNote(){const rg=a=>{if(!a.length)return"–";const x=Math.min(...a),y=Math.max(...a);return x===y?""+x:x+"–"+y};
+ const d1=[],d2=[];an.ev.forEach(e=>{if(!e||e.term)return;if(e.pass===2){d2.push(e.depth);if(e.d1)d1.push(e.d1)}else if(e.depth)d1.push(e.depth)});
+ let h='<div class="an-info" style="margin-top:8px">Profundidad alcanzada · 1ª pasada: '+rg(d1);
+ if(an.p2&&an.p2.total){h+=" · 2ª pasada: "+rg(d2)+" ("+d2.length+" de "+an.p2.total+" posiciones)";
+  if(an.p2.changed)h+=" · "+an.p2.changed+(an.p2.changed===1?" jugada reclasificada":" jugadas reclasificadas")}
+ return h+"</div>"}
 const fmt=e=>!e?"…":e.mate!==null?(e.mate===0?"#":(e.mate>0?"+":"-")+"M"+Math.abs(e.mate)):(e.cp>0?"+":"")+(e.cp/100).toFixed(1);
 function pvSan(s,pv){const o=[];for(const u of pv){const L=MC.legal(s),m=MC.parse(s,u,L);if(!m)break;o.push(MC.san(s,m,L));s=MC.make(s,m)}return o.join(" ")}
 function accOf(c){const a=an.cl.map((x,i)=>x&&an.g.moves[i].col===c?x.acc:null).filter(x=>x!==null);if(!a.length)return null;
@@ -11266,31 +11460,35 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
  $("anTop").innerHTML=pl(an.flip?"w":"b");$("anBot").innerHTML=pl(an.flip?"b":"w");
  let t="";if(last&&cl){t+='<b style="color:'+CL[cl.k][1]+'">'+last.san+" "+CL[cl.k][0]+"</b> "+CL[cl.k][2];const pb=an.ev[an.ply-1]&&an.ev[an.ply-1].bm;
   if(pb&&pb!==last.uci&&/inac|mist|blun/.test(cl.k))t+=" · mejor era <b>"+pvSan(g.states[an.ply-1],[pb])+"</b>"}
- if(e&&e.pv.length)t+=(t?"<br>":"")+"Línea del motor: "+pvSan(s,e.pv.slice(0,6));$("anLine").innerHTML=t;
+ if(e&&e.pv.length)t+=(t?"<br>":"")+"Línea del motor"+(e.depth?" (prof. "+e.depth+(e.pass===2?" · 2ª pasada":"")+")":"")+": "+pvSan(s,e.pv.slice(0,6));$("anLine").innerHTML=t;deepRender();
  $("anMoves").innerHTML=g.moves.map((m,i)=>(m.col==="w"||i===0?'<span class="an-n">'+m.n+(m.col==="w"?".":"…")+"</span>":"")+'<button class="an-mv'+(an.ply===i+1?" on":"")+'" data-p="'+(i+1)+'">'+m.san+(an.cl[i]?'<small style="color:'+CL[an.cl[i].k][1]+'">'+CL[an.cl[i].k][0]+"</small>":"")+"</button>").join("")||'<span class="an-info">Sin jugadas (solo posición).</span>';
  const on=$("anMoves").querySelector(".on");if(on)on.scrollIntoView({block:"nearest"});
  const S=$("anSum");if(!an.cl.some(Boolean)){S.hidden=true;return}S.hidden=false;
  const cnt=(c,k)=>an.cl.filter((x,i)=>x&&x.k===k&&g.moves[i].col===c).length,aw=accOf("w"),ab=accOf("b");
- S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"}
-const go=p=>{if(!an.g)return;an.ply=Math.max(0,Math.min(an.g.moves.length,p));anRender()};
-function anLoad(txt,auto){try{const g=loadText(txt);anStop();an={g,ply:0,ev:[],cl:[],flip:false};
+ S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()}
+const go=p=>{if(!an.g)return;const np=Math.max(0,Math.min(an.g.moves.length,p));if(np!==an.ply&&deepBusy)deepStop();an.ply=np;anRender()};
+function anLoad(txt,auto){try{const g=loadText(txt);anStop();an=newAn(g);setWarn(g.warn);
  $("anErr").textContent="";$("anLoad").hidden=true;$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";anRender();if(auto)anAnalyze()}
  catch(e){$("anErr").textContent=e.message;$("anLoad").hidden=false}}
 function anOpen(txt,auto){anBack=resultOverlay.style.display==="flex";resultOverlay.style.display="none";$("anOverlay").style.display="block";document.body.style.overflow="hidden";
- anStop();an={g:emptyG(),ply:0,ev:[],cl:[],flip:false};$("anErr").textContent="";$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";
+ anStop();an=newAn(emptyG());setWarn([]);$("anErr").textContent="";$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";
  if(txt){$("anText").value=txt;anLoad(txt,auto)}else{$("anLoad").hidden=false;anRender()}}
 function anGame(){anOpen(buildPGN(),true);if(mode==="bot"&&playerColor==="b"){an.flip=true;anRender()}}
 function anClose(){anStop();$("anOverlay").style.display="none";document.body.style.overflow="";if(anBack)resultOverlay.style.display="flex"}
 $("anClose").onclick=anClose;$("anPaste").onclick=()=>{$("anLoad").hidden=!$("anLoad").hidden};
 $("anGo").onclick=()=>anLoad($("anText").value,true);
 $("anEx").onclick=()=>{$("anText").value="1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7 8. Nc3 c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7 14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0"};
-$("anRun").onclick=()=>an.g&&anAnalyze();
+$("anRun").onclick=()=>an.g&&anAnalyze();$("anDeep").onclick=anDeep;
 $("anFirst").onclick=()=>go(0);$("anPrev").onclick=()=>go(an.ply-1);$("anNext").onclick=()=>go(an.ply+1);$("anLast").onclick=()=>an.g&&go(an.g.moves.length);
 $("anFlip").onclick=()=>{an.flip=!an.flip;anRender()};
 $("anMoves").onclick=e=>{const b=e.target.closest("[data-p]");if(b)go(+b.dataset.p)};
 document.addEventListener("keydown",e=>{if($("anOverlay").style.display!=="block"||/TEXTAREA|SELECT/.test(e.target.tagName))return;
  if(e.key==="ArrowLeft")go(an.ply-1);else if(e.key==="ArrowRight")go(an.ply+1);else if(e.key==="Home")go(0);else if(e.key==="End")go(1e4);else if(e.key==="Escape")anClose()});
 $("resultAnalyze").onclick=anGame;
+/* Cerrar la ventana de resultado: botón ✕ o clic fuera de la tarjeta */
+const closeResult=()=>{resultOverlay.style.display="none"};
+$("resultClose").onclick=closeResult;
+resultOverlay.addEventListener("click",e=>{if(e.target===resultOverlay)closeResult()});
 $("startAnalyze").onclick=()=>anOpen("",false);
 })();
 </script>
