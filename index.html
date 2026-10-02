@@ -170,6 +170,20 @@ body{
     overflow:auto;
 }
 
+.copyright-note{
+    position:fixed;
+    right:14px;
+    bottom:10px;
+    z-index:1;
+    max-width:calc(100% - 28px);
+    text-align:right;
+    font-size:11px;
+    line-height:1.4;
+    color:rgba(197,208,216,.55);
+    pointer-events:none;
+    user-select:none;
+}
+
 .start-card{
 
     position:relative;
@@ -2826,7 +2840,7 @@ button:active{
 .an-pv .an-t{color:#c5d0d8;word-break:break-word}
 /* Flecha SVG de la mejor jugada + interruptor del análisis automático */
 .an-arrows{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:8;overflow:visible}
-.an-arrow{fill:#16c784;fill-opacity:.85;stroke:#04281c;stroke-opacity:.35;stroke-width:.03;stroke-linejoin:round;animation:anArrowIn .2s ease-out}
+.an-arrow{fill:#fff;fill-opacity:.9;stroke:#0b121a;stroke-opacity:.6;stroke-width:.04;stroke-linejoin:round;animation:anArrowIn .2s ease-out}
 @keyframes anArrowIn{from{opacity:0}to{opacity:1}}
 .an-sw{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;font-size:13px;font-weight:800;color:#e6edf2;user-select:none}
 .an-sw input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
@@ -2917,6 +2931,8 @@ button:active{
     id="startScreen"
     class="start-screen"
 >
+
+    <div class="copyright-note">© 2026 Matías José Vargas Rodríguez · Todos los derechos reservados</div>
 
     <div class="start-card">
 
@@ -11421,15 +11437,18 @@ async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
 /* ---------- Posición actual: análisis automático con 3 líneas (MultiPV) ----------
    Funciona como Lichess / Chess.com:
    · Las 3 líneas se muestran desde el primer resultado, sin profundidad mínima.
-   · La flecha de la mejor jugada solo se dibuja desde ARROW_MIN_D y cuando esa jugada
-     lleva ARROW_STABLE profundidades seguidas sin cambiar.
+   · Primero se calcula 1 sola línea (rápido, sale la flecha) y después las 3 líneas.
+   · La flecha se dibuja desde arrowMin() y cuando la mejor jugada lleva ARROW_STABLE
+     profundidades seguidas sin cambiar; se mantiene hasta que otra se confirme y, al
+     terminar la búsqueda, se dibuja siempre la última mejor jugada.
    · Se detiene al llegar al tope de profundidad o de tiempo (lo que ocurra primero).
      En móvil el tope es más bajo.
    · Se cancela solo al cambiar de jugada, recuerda las posiciones ya analizadas y se
      puede activar/desactivar con el interruptor (la preferencia se guarda). */
-const ARROW_MIN_D=16,ARROW_STABLE=3,CACHE_MAX=400,AUTO_KEY="matchess_an_auto";
+const ARROW_STABLE=2,CACHE_MAX=400,AUTO_KEY="matchess_an_auto";
 const isMobile=()=>{try{return/Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform||""))||(window.matchMedia("(pointer:coarse)").matches&&innerWidth<=900)}catch(_){return false}};
 const limits=()=>isMobile()?{d:18,ms:5000}:{d:22,ms:8000};
+const arrowMin=()=>isMobile()?12:14;
 let autoOn=true;try{if(localStorage.getItem(AUTO_KEY)==="0")autoOn=false}catch(_){}
 
 /* Memoria de posiciones ya analizadas (LRU). Clave = FEN sin contadores de jugadas. */
@@ -11498,16 +11517,25 @@ async function aeRun(){
  try{w=await aeWorker()}catch(e){if(my===AE.job&&!e.cancelled){AE.cur={key,state:"err",err:e.message};deepRender()}return}
  if(my!==AE.job)return;
  clearTimeout(AE.idle);
- const lim=limits(),sg=s.t==="w"?1:-1,nL=Math.max(1,Math.min(3,MC.legal(s).length)),base=ent0?ent0.depth:0;
- const W={raw:[],depth:0,best:"",streak:0,lastD:0,live:false};
+ const lim=limits(),minD=arrowMin(),sg=s.t==="w"?1:-1,nL=Math.max(1,Math.min(3,MC.legal(s).length)),base=ent0?ent0.depth:0;
+ const p1d=nL>1?Math.min(lim.d,minD+ARROW_STABLE):lim.d;   /* fase 1: 1 línea hasta la profundidad de la flecha */
+ const W={raw:[],maxD:0,best:"",fb:"",streak:0,lastD:0,live:false,arrow:ent0?ent0.arrow:"",phase:1,t0:Date.now()};
+ const send=(n,d,ms)=>{w.postMessage("setoption name MultiPV value "+n);w.postMessage("position fen "+chk.fen);w.postMessage("go depth "+d+" movetime "+ms)};
  AE.cur={key,state:"run"};AE.searching=true;
  clearTimeout(AE.wd);
  AE.wd=setTimeout(()=>{if(my!==AE.job)return;aeKill();AE.cur={key,state:"err",err:"Stockfish tardó demasiado."};deepRender()},lim.ms+4000);
  AE.h=l=>{
-  if(l.startsWith("bestmove")){                          /* fin natural: tope de profundidad o de tiempo */
+  if(l.startsWith("bestmove")){
+   if(my===AE.job&&W.phase===1&&nL>1){                   /* fin de la fase 1 -> fase 2 con 3 líneas en el tiempo restante */
+    const rem=lim.ms-(Date.now()-W.t0);
+    if(rem>=400){W.phase=2;W.fb=W.best;W.lastD=0;W.streak=0;W.best="";
+     try{send(nL,lim.d,rem)}catch(_){aeKill();AE.cur={key,state:"err",err:"No se pudo comunicar con Stockfish."};deepRender()}
+     return}}
    AE.searching=false;AE.h=null;clearTimeout(AE.wd);
    if(my!==AE.job)return;
    const e=posCache.get(key)||{lines:[],depth:0,arrow:""};
+   const fin=W.lastD>=minD?W.best:W.fb;
+   if(W.live&&fin)e.arrow=fin;                           /* al terminar siempre se dibuja la última mejor jugada */
    e.done=true;cacheSet(key,e);AE.cur=null;
    clearTimeout(AE.idle);AE.idle=setTimeout(()=>{if(!AE.searching)aeKill()},60000);
    deepRender();return}
@@ -11516,19 +11544,16 @@ async function aeRun(){
   if(!sc||!pv)return;
   const i=(mp?+mp[1]:1)-1,D=dm?+dm[1]:0,mv=pv[1].trim().split(/\s+/);
   if(i<0||i>2)return;
-  W.raw[i]={k:sc[1],v:+sc[2],pv:mv,depth:D};
   if(i===0){                                             /* estabilidad de la mejor jugada por profundidad */
    if(D>W.lastD){W.streak=mv[0]===W.best?W.streak+1:1;W.best=mv[0];W.lastD=D}
    else if(mv[0]!==W.best){W.best=mv[0];W.streak=1}
-   W.depth=D}
-  if(!W.live){if(W.depth>base)W.live=true;else return}   /* al reanudar una posición parcial no se retrocede en profundidad */
-  const arrow=W.depth>=ARROW_MIN_D&&W.streak>=ARROW_STABLE?W.best:"";
-  cacheSet(key,{lines:W.raw.filter(Boolean).map(L=>lineE(L,sg)),depth:W.depth,arrow,done:false});
+   W.maxD=Math.max(W.maxD,D);
+   if(W.lastD>=minD&&W.streak>=ARROW_STABLE)W.arrow=W.best}   /* la flecha anterior se mantiene hasta confirmar otra */
+  const c=W.raw[i];if(!c||D>=c.depth)W.raw[i]={k:sc[1],v:+sc[2],pv:mv,depth:D};   /* la fase 2 no retrocede líneas ya profundas */
+  if(!W.live){if(W.maxD>base)W.live=true;else return}    /* al reanudar una posición parcial no se retrocede */
+  cacheSet(key,{lines:W.raw.filter(Boolean).map(L=>lineE(L,sg)),depth:W.maxD,arrow:W.arrow,done:false});
   deepRender()};
- try{
-  w.postMessage("setoption name MultiPV value "+nL);
-  w.postMessage("position fen "+chk.fen);
-  w.postMessage("go depth "+lim.d+" movetime "+lim.ms)}
+ try{send(nL>1?1:nL,p1d,lim.ms)}
  catch(_){aeKill();AE.cur={key,state:"err",err:"No se pudo comunicar con Stockfish."};deepRender()}}
 
 /* ---------- Flecha SVG de la mejor jugada (capa sobre #anBoard, viewBox 8×8 = una unidad por casilla) ---------- */
@@ -11623,7 +11648,7 @@ $("anEx").onclick=()=>{$("anText").value="1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 B
 $("anRun").onclick=()=>an.g&&anAnalyze();
 /* Interruptor del análisis automático + aviso de límites según dispositivo */
 {const au=$("anAuto"),lim=limits();au.checked=autoOn;
- $("anAutoHint").textContent="Flecha de la mejor jugada desde prof. "+ARROW_MIN_D+" con "+ARROW_STABLE+" profundidades estables · se detiene a prof. "+lim.d+" o "+lim.ms/1000+" s"+(isMobile()?" (modo móvil)":"")+".";
+ $("anAutoHint").textContent="Flecha de la mejor jugada desde prof. "+arrowMin()+" con "+ARROW_STABLE+" profundidades estables · se detiene a prof. "+lim.d+" o "+lim.ms/1000+" s"+(isMobile()?" (modo móvil)":"")+".";
  au.onchange=()=>{autoOn=au.checked;try{localStorage.setItem(AUTO_KEY,autoOn?"1":"0")}catch(_){}
   if(autoOn)autoKick(0);else{AE.job++;clearTimeout(AE.t);AE.cur=null;aeKill();deepRender()}}}
 /* Pestaña oculta: se pausa el motor para no gastar batería; al volver se reanuda */
