@@ -2790,7 +2790,7 @@ button:active{
 .an-bar.fl .an-fill{bottom:auto;top:0}
 .an-bar i{position:absolute;left:0;right:0;bottom:3px;z-index:2;font:700 9px/1 sans-serif;text-align:center;color:#fff;mix-blend-mode:difference}
 .an-bar.fl i{bottom:auto;top:3px}
-.an-board{flex:1;aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));border:4px solid #080d12;border-radius:6px;overflow:hidden}
+.an-board{position:relative;flex:1;aspect-ratio:1/1;display:grid;grid-template-columns:repeat(8,minmax(0,1fr));grid-template-rows:repeat(8,minmax(0,1fr));border:4px solid #080d12;border-radius:6px;overflow:hidden}
 .an-pl{display:flex;justify-content:space-between;padding:6px 4px 6px 34px;font-size:12px;color:#c5d0d8}
 .an-nav{display:flex;gap:6px;margin-top:8px}
 .an-nav button{flex:1;padding:11px;font-size:15px}
@@ -2824,6 +2824,17 @@ button:active{
 .an-pv b{flex:none;min-width:48px;font-variant-numeric:tabular-nums;color:#fff}
 .an-pv .an-d{flex:none;color:#657580;font-size:10px}
 .an-pv .an-t{color:#c5d0d8;word-break:break-word}
+/* Flecha SVG de la mejor jugada + interruptor del análisis automático */
+.an-arrows{position:absolute;left:0;top:0;width:100%;height:100%;pointer-events:none;z-index:8;overflow:visible}
+.an-arrow{fill:#16c784;fill-opacity:.85;stroke:#04281c;stroke-opacity:.35;stroke-width:.03;stroke-linejoin:round;animation:anArrowIn .2s ease-out}
+@keyframes anArrowIn{from{opacity:0}to{opacity:1}}
+.an-sw{position:relative;display:flex;align-items:center;justify-content:space-between;gap:10px;cursor:pointer;font-size:13px;font-weight:800;color:#e6edf2;user-select:none}
+.an-sw input{position:absolute;opacity:0;width:1px;height:1px;pointer-events:none}
+.an-sw i{position:relative;flex:none;width:44px;height:24px;border-radius:12px;background:#2a3844;transition:background .2s}
+.an-sw i::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:#fff;transition:transform .2s}
+.an-sw input:checked+i{background:#14b8a6}
+.an-sw input:checked+i::after{transform:translateX(20px)}
+.an-sw input:focus-visible+i{outline:2px solid #4cc9f0;outline-offset:2px}
 @media(max-width:900px){.an-main{grid-template-columns:1fr}.an-left{position:static;max-width:none}}
 </style>
 </head>
@@ -11134,7 +11145,8 @@ boardElement.addEventListener("pointerdown", function(event){
     <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones y errores con mayor profundidad</span></label>
     <div class="progress"><div id="anProg" class="progress-fill" style="width:0"></div></div><div class="an-info" id="anInfo">Listo para analizar.</div></div>
    <div class="an-card" id="anPos"><div class="card-title">Posición actual</div>
-    <div class="an-row" style="margin-top:0"><button id="anDeep" class="an-accent" style="flex:1">🔎 Análisis profundo · 3 líneas</button></div>
+    <label class="an-sw"><span>🔎 Análisis automático · 3 líneas</span><input type="checkbox" id="anAuto"><i></i></label>
+    <div class="an-info" id="anAutoHint" style="margin:6px 0 0"></div>
     <div class="an-info" id="anDeepInfo" style="margin:8px 0 4px"></div><div id="anDeepLines"></div></div>
    <div class="an-card" id="anSum" hidden></div>
    <div class="an-card"><div class="card-title">Jugadas</div><div id="anMoves" class="an-moves"></div></div>
@@ -11315,11 +11327,11 @@ $("mvMenu").onclick=e=>{const a=e.target.closest("button");if(!a||a.disabled)ret
 /* ---------- Analizador con Stockfish (worker propio) ---------- */
 const CL={best:["★","#96bc4b","Mejor"],exc:["!","#8fc65a","Excelente"],good:["✓","#a4b4a0","Bueno"],inac:["?!","#f6c23e","Imprecisión"],mist:["?","#f08a24","Error"],blun:["??","#e04848","Error grave"]};
 const wp=cp=>50+50*(2/(1+Math.exp(-.00368208*Math.max(-1500,Math.min(1500,cp))))-1);
-const SF_URL="stockfish/stockfish-19-lite-single.js",DEEP_D=24,DEEP_MS=15000,BAD=/inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
-const newAn=g=>({g,ply:0,ev:[],cl:[],flip:false,deep:{},p2:null});
-let an=newAn(null),anW=null,anRun=0,anBack=false,deepRun=0,deepBusy=false,deepCur=null,gameBusy=false;
+const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
+const newAn=g=>({g,ply:0,ev:[],cl:[],flip:false,p2:null});
+let an=newAn(null),anW=null,anRun=0,anBack=false,gameBusy=false;
 const anWs=new Set(),pend=new Set();
-const emptyG=()=>({H:{},res:"*",moves:[],states:[MC.fromFEN(START)],warn:[]});
+const emptyG=()=>({H:{},res:"*",moves:[],states:[MC.fromFEN(START)],warn:[],empty:true});
 const mkErr=(m,c)=>{const e=new Error(m);e.cancelled=!!c;return e};
 const prog=x=>{$("anProg").style.width=x+"%"};
 
@@ -11330,7 +11342,7 @@ function killW(w){if(!w)return;
  anWs.delete(w);if(anW===w)anW=null;
  for(const p of[...pend])if(p.w===w){pend.delete(p);p.cancel()}}
 function killAll(){for(const w of[...anWs])killW(w);anW=null}
-function anStop(){anRun++;deepRun++;gameBusy=false;if(deepBusy&&deepCur)deepCur.d.state="stop";deepBusy=false;deepCur=null;killAll();anBtns()}
+function anStop(){anRun++;gameBusy=false;killAll();AE.job++;clearTimeout(AE.t);AE.cur=null;aeHalt()}
 function engine(){return new Promise((res,rej)=>{killAll();let w;
  try{w=new Worker(SF_URL)}catch(e){rej(e);return}
  anWs.add(w);anW=w;
@@ -11371,7 +11383,7 @@ const cls=(A,i)=>classify(A.ev[i],A.ev[i+1],A.g.moves[i]);
 
 async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
  const[ms,dp]=$("anSpeed").value.split(",").map(Number),two=$("anTwo").checked;
- gameBusy=true;anBtns();
+ gameBusy=true;aeKill();deepRender();
  A.ev=[];A.cl=[];A.p2=null;$("anInfo").textContent="Iniciando Stockfish…";prog(0);anRender();
  let w=null;
  try{
@@ -11404,39 +11416,168 @@ async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
    if(!tail)tail=list.length?" · 2ª pasada: "+list.length+" posiciones a mayor profundidad":" · sin imprecisiones ni errores que revisar"}
   prog(100);$("anInfo").textContent="Análisis completo ✓"+tail;anRender()}
  catch(e){if(my===anRun&&!e.cancelled)$("anInfo").textContent="Error: "+e.message}
- finally{killW(w);if(my===anRun){gameBusy=false;anBtns()}}}
+ finally{killW(w);if(my===anRun){gameBusy=false;autoKick(0)}}}
 
-/* ---------- Posición actual: análisis profundo con 3 líneas (MultiPV) ---------- */
-function anBtns(){const b=$("anDeep");b.disabled=gameBusy||!an.g;b.textContent=deepBusy?"⏹ Detener análisis":"🔎 Análisis profundo · 3 líneas"}
+/* ---------- Posición actual: análisis automático con 3 líneas (MultiPV) ----------
+   Funciona como Lichess / Chess.com:
+   · Las 3 líneas se muestran desde el primer resultado, sin profundidad mínima.
+   · La flecha de la mejor jugada solo se dibuja desde ARROW_MIN_D y cuando esa jugada
+     lleva ARROW_STABLE profundidades seguidas sin cambiar.
+   · Se detiene al llegar al tope de profundidad o de tiempo (lo que ocurra primero).
+     En móvil el tope es más bajo.
+   · Se cancela solo al cambiar de jugada, recuerda las posiciones ya analizadas y se
+     puede activar/desactivar con el interruptor (la preferencia se guarda). */
+const ARROW_MIN_D=16,ARROW_STABLE=3,CACHE_MAX=400,AUTO_KEY="matchess_an_auto";
+const isMobile=()=>{try{return/Android|iPhone|iPad|iPod|Mobi/i.test(navigator.userAgent)||(navigator.maxTouchPoints>1&&/Mac/.test(navigator.platform||""))||(window.matchMedia("(pointer:coarse)").matches&&innerWidth<=900)}catch(_){return false}};
+const limits=()=>isMobile()?{d:18,ms:5000}:{d:22,ms:8000};
+let autoOn=true;try{if(localStorage.getItem(AUTO_KEY)==="0")autoOn=false}catch(_){}
+
+/* Memoria de posiciones ya analizadas (LRU). Clave = FEN sin contadores de jugadas. */
+const posCache=new Map();
+const posFen=s=>s._f||(s._f=MC.toFEN(s));
+const keyOf=s=>s._k||(s._k=posFen(s).split(" ").slice(0,4).join(" "));
+const termOf=s=>{if(s._t===undefined)s._t=MC.legal(s).length?"":(MC.inCheck(s)?"mate":"stalemate");return s._t};
+function cacheSet(k,e){posCache.delete(k);posCache.set(k,e);if(posCache.size>CACHE_MAX)posCache.delete(posCache.keys().next().value)}
+
+/* Motor persistente del análisis automático (independiente del de la partida completa).
+   Un solo Worker reutilizable: al cambiar de jugada se le envía "stop" y, si no responde
+   a tiempo, se reinicia. Se cierra al apagar el interruptor, cerrar el análisis o quedar inactivo. */
+const AE={w:null,ready:false,boot:null,bootRej:null,searching:false,h:null,halting:null,haltFin:null,job:0,t:0,wd:0,idle:0,cur:null};
+function aeKill(){
+ clearTimeout(AE.wd);clearTimeout(AE.idle);
+ const w=AE.w,r=AE.bootRej,hf=AE.haltFin;
+ AE.w=null;AE.ready=false;AE.boot=null;AE.bootRej=null;AE.searching=false;AE.h=null;AE.halting=null;AE.haltFin=null;
+ if(w){try{w.onmessage=null;w.onerror=null;w.terminate()}catch(_){}}
+ if(r)r(mkErr("Cancelado.",1));
+ if(hf)hf()}
+function aeFail(msg){if(AE.cur){AE.cur.state="err";AE.cur.err=msg}deepRender()}
+function aeWorker(){
+ if(AE.w&&AE.ready)return Promise.resolve(AE.w);
+ if(AE.boot)return AE.boot;
+ AE.boot=new Promise((res,rej)=>{
+  let w;try{w=new Worker(SF_URL)}catch(e){AE.boot=null;rej(e);return}
+  AE.w=w;AE.bootRej=rej;
+  const to=setTimeout(()=>{if(AE.w===w){AE.bootRej=null;aeKill();rej(mkErr("Stockfish no respondió."))}},9000);
+  w.onerror=()=>{clearTimeout(to);if(AE.w===w){AE.bootRej=null;aeKill()}rej(mkErr("No se pudo cargar Stockfish."))};
+  w.onmessage=e=>{const l=typeof e.data==="string"?e.data:"";
+   if(l==="uciok")w.postMessage("isready");
+   else if(l==="readyok"){clearTimeout(to);AE.ready=true;AE.boot=null;AE.bootRej=null;
+    w.onerror=()=>{if(AE.w===w){aeKill();aeFail("Stockfish falló durante el análisis.")}};
+    w.onmessage=ev=>{if(AE.h)AE.h(typeof ev.data==="string"?ev.data:"")};res(w)}};
+  w.postMessage("uci")});
+ return AE.boot}
+/* Detiene la búsqueda en curso (si la hay) y espera su "bestmove"; si no llega, reinicia el motor. */
+function aeHalt(){
+ if(!AE.searching)return Promise.resolve();
+ if(AE.halting)return AE.halting;
+ const w=AE.w;
+ AE.halting=new Promise(res=>{
+  const fin=()=>{clearTimeout(tm);clearTimeout(AE.wd);AE.halting=null;AE.haltFin=null;res()};
+  const tm=setTimeout(()=>{aeKill();fin()},450);
+  AE.haltFin=fin;
+  AE.h=l=>{if(l.startsWith("bestmove")){AE.searching=false;AE.h=null;fin()}};
+  try{w.postMessage("stop")}catch(_){aeKill();fin()}});
+ return AE.halting}
+/* Pide (re)analizar la posición actual: cancela lo anterior y espera un instante por si se sigue navegando. */
+function autoKick(delay){
+ AE.job++;clearTimeout(AE.t);AE.cur=null;aeHalt();
+ if(autoOn&&!gameBusy&&!document.hidden&&an.g&&!an.g.empty&&$("anOverlay").style.display==="block")AE.t=setTimeout(aeRun,delay==null?180:delay);
+ deepRender()}
+async function aeRun(){
+ const A=an;
+ if(!autoOn||gameBusy||document.hidden||!A.g||A.g.empty||$("anOverlay").style.display!=="block")return;
+ const my=AE.job,s=A.g.states[A.ply];
+ if(termOf(s))return;
+ const key=keyOf(s),ent0=posCache.get(key);
+ if(ent0&&ent0.done){deepRender();return}               /* ya analizada hasta el tope: no se vuelve a calcular */
+ const chk=MC.validateFEN(posFen(s));
+ AE.cur={key,state:"boot"};deepRender();
+ await aeHalt();if(my!==AE.job)return;
+ if(!chk.ok){AE.cur={key,state:"err",err:chk.error};deepRender();return}
+ let w;
+ try{w=await aeWorker()}catch(e){if(my===AE.job&&!e.cancelled){AE.cur={key,state:"err",err:e.message};deepRender()}return}
+ if(my!==AE.job)return;
+ clearTimeout(AE.idle);
+ const lim=limits(),sg=s.t==="w"?1:-1,nL=Math.max(1,Math.min(3,MC.legal(s).length)),base=ent0?ent0.depth:0;
+ const W={raw:[],depth:0,best:"",streak:0,lastD:0,live:false};
+ AE.cur={key,state:"run"};AE.searching=true;
+ clearTimeout(AE.wd);
+ AE.wd=setTimeout(()=>{if(my!==AE.job)return;aeKill();AE.cur={key,state:"err",err:"Stockfish tardó demasiado."};deepRender()},lim.ms+4000);
+ AE.h=l=>{
+  if(l.startsWith("bestmove")){                          /* fin natural: tope de profundidad o de tiempo */
+   AE.searching=false;AE.h=null;clearTimeout(AE.wd);
+   if(my!==AE.job)return;
+   const e=posCache.get(key)||{lines:[],depth:0,arrow:""};
+   e.done=true;cacheSet(key,e);AE.cur=null;
+   clearTimeout(AE.idle);AE.idle=setTimeout(()=>{if(!AE.searching)aeKill()},60000);
+   deepRender();return}
+  if(my!==AE.job||!l.startsWith("info")||!l.includes(" score ")||/bound/.test(l))return;
+  const sc=l.match(/score (cp|mate) (-?\d+)/),pv=l.match(/ pv (.+)$/),dm=l.match(/ depth (\d+)/),mp=l.match(/ multipv (\d+)/);
+  if(!sc||!pv)return;
+  const i=(mp?+mp[1]:1)-1,D=dm?+dm[1]:0,mv=pv[1].trim().split(/\s+/);
+  if(i<0||i>2)return;
+  W.raw[i]={k:sc[1],v:+sc[2],pv:mv,depth:D};
+  if(i===0){                                             /* estabilidad de la mejor jugada por profundidad */
+   if(D>W.lastD){W.streak=mv[0]===W.best?W.streak+1:1;W.best=mv[0];W.lastD=D}
+   else if(mv[0]!==W.best){W.best=mv[0];W.streak=1}
+   W.depth=D}
+  if(!W.live){if(W.depth>base)W.live=true;else return}   /* al reanudar una posición parcial no se retrocede en profundidad */
+  const arrow=W.depth>=ARROW_MIN_D&&W.streak>=ARROW_STABLE?W.best:"";
+  cacheSet(key,{lines:W.raw.filter(Boolean).map(L=>lineE(L,sg)),depth:W.depth,arrow,done:false});
+  deepRender()};
+ try{
+  w.postMessage("setoption name MultiPV value "+nL);
+  w.postMessage("position fen "+chk.fen);
+  w.postMessage("go depth "+lim.d+" movetime "+lim.ms)}
+ catch(_){aeKill();AE.cur={key,state:"err",err:"No se pudo comunicar con Stockfish."};deepRender()}}
+
+/* ---------- Flecha SVG de la mejor jugada (capa sobre #anBoard, viewBox 8×8 = una unidad por casilla) ---------- */
+const SVGNS="http://www.w3.org/2000/svg",arrowSvg=document.createElementNS(SVGNS,"svg");
+arrowSvg.setAttribute("viewBox","0 0 8 8");arrowSvg.setAttribute("class","an-arrows");arrowSvg.setAttribute("aria-hidden","true");
+let arrowKey="";
+function arrowMove(){
+ if(!autoOn||!an.g||an.g.empty)return"";
+ const s=an.g.states[an.ply];if(termOf(s))return"";
+ const e=posCache.get(keyOf(s));return e&&e.arrow||""}
+function drawArrow(){
+ const mv=arrowMove(),k=mv+"|"+an.flip;
+ if(k===arrowKey)return;
+ arrowKey=k;arrowSvg.textContent="";
+ if(!/^[a-h][1-8][a-h][1-8]/.test(mv))return;
+ const pt=q=>{const c=q.charCodeAt(0)-97,r=8-+q[1];return[(an.flip?7-c:c)+.5,(an.flip?7-r:r)+.5]};
+ const[x1,y1]=pt(mv.slice(0,2)),[x2,y2]=pt(mv.slice(2,4)),dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy);
+ if(!len)return;
+ const ux=dx/len,uy=dy/len,nx=-uy,ny=ux,HW=.27,HL=Math.min(.4,len*.6),SW=.085;
+ const sx=x1+ux*.12,sy=y1+uy*.12,tx=x2-ux*.06,ty=y2-uy*.06,bx=tx-ux*HL,by=ty-uy*HL;
+ const P=[[sx+nx*SW,sy+ny*SW],[bx+nx*SW,by+ny*SW],[bx+nx*HW,by+ny*HW],[tx,ty],[bx-nx*HW,by-ny*HW],[bx-nx*SW,by-ny*SW],[sx-nx*SW,sy-ny*SW]];
+ const el=document.createElementNS(SVGNS,"polygon");
+ el.setAttribute("points",P.map(a=>a[0].toFixed(3)+","+a[1].toFixed(3)).join(" "));el.setAttribute("class","an-arrow");
+ arrowSvg.appendChild(el)}
+
+/* Barra de evaluación: usa el análisis automático si es más profundo que el de la partida. */
+function barE(){
+ const e=an.ev[an.ply];
+ if(autoOn&&an.g&&!an.g.empty){const d=posCache.get(keyOf(an.g.states[an.ply]));if(d&&d.lines[0]&&(!e||d.depth>=(e.depth||0)))return d.lines[0]}
+ return e}
+function updBar(){const e=barE();$("anBar").classList.toggle("fl",an.flip);$("anFill").style.height=(e?wp(e.cp):50)+"%";$("anEv").textContent=fmt(e)}
+
 function pvNum(s,pv,max){const o=[];let first=true;for(const u of pv.slice(0,max)){const L=MC.legal(s),m=MC.parse(s,u,L);if(!m)break;
  o.push((s.t==="w"?s.n+". ":(first?s.n+"… ":""))+MC.san(s,m,L));s=MC.make(s,m);first=false}return o.join(" ")}
-function deepRender(){const I=$("anDeepInfo"),B=$("anDeepLines");anBtns();
- if(!an.g){B.innerHTML="";I.textContent="";return}
- const d=an.deep[an.ply],s=an.g.states[an.ply];
- if(!d){B.innerHTML="";I.textContent=gameBusy?"Disponible cuando termine el análisis de la partida.":"Analiza la posición del tablero con más profundidad y 3 líneas (MultiPV).";return}
- B.innerHTML=d.lines.map(l=>'<div class="an-pv"><b>'+fmt(l)+'</b><span class="an-d">prof. '+l.depth+'</span><span class="an-t">'+pvNum(s,l.pv,10)+"</span></div>").join("");
- const pd=d.depth?"profundidad alcanzada: "+d.depth:"";
- I.textContent=d.term?"Posición final: no hay jugadas legales ("+(d.term==="mate"?"jaque mate":"ahogado")+").":
-  d.state==="run"?(d.lines.length?"Analizando… "+pd:"Iniciando Stockfish…"):
-  d.state==="done"?"Análisis profundo completo ✓ · "+pd:
-  d.state==="err"?"Error: "+d.err+(pd?" · "+pd:""):
-  "Detenido"+(pd?" · "+pd:"")}
-async function anDeep(){
- if(deepBusy){deepStop();return}
- if(!an.g||gameBusy)return;
- const A=an,ply=A.ply,s=A.g.states[ply],my=++deepRun,leg=MC.legal(s);
- if(!leg.length){A.deep[ply]={lines:[],depth:0,state:"done",term:MC.inCheck(s)?"mate":"stalemate"};deepRender();return}
- const d=A.deep[ply]={lines:[],depth:0,state:"run"};deepCur={d};deepBusy=true;deepRender();
- let w=null;
- try{
-  w=await engine();if(my!==deepRun)return;
-  const sg=s.t==="w"?1:-1,set=ls=>{d.lines=ls.map(L=>lineE(L,sg));d.depth=Math.max(0,...d.lines.map(l=>l.depth))};
-  const r=await search(w,MC.toFEN(s),DEEP_D,DEEP_MS,{multi:Math.min(3,leg.length),onInfo:ls=>{if(my!==deepRun)return;set(ls.filter(Boolean));if(an===A&&an.ply===ply)deepRender()}});
-  if(my!==deepRun)return;
-  set(r.lines);d.state="done"}
- catch(e){if(my===deepRun&&!e.cancelled){d.state="err";d.err=e.message}}
- finally{killW(w);if(my===deepRun){deepBusy=false;deepCur=null}if(an===A)deepRender()}}
-function deepStop(){if(!deepBusy)return;deepRun++;if(deepCur)deepCur.d.state="stop";deepBusy=false;deepCur=null;killAll();deepRender()}
+function deepRender(){const I=$("anDeepInfo"),B=$("anDeepLines");
+ const none=!an.g||an.g.empty;
+ if(none||!autoOn){B.innerHTML="";I.textContent=none?"":"Análisis automático desactivado.";drawArrow();updBar();return}
+ const s=an.g.states[an.ply],tm=termOf(s);
+ if(tm){B.innerHTML="";I.textContent="Posición final: no hay jugadas legales ("+(tm==="mate"?"jaque mate":"ahogado")+").";drawArrow();updBar();return}
+ const key=keyOf(s),e=posCache.get(key),cur=AE.cur&&AE.cur.key===key?AE.cur:null,lim=limits(),pd=e&&e.depth?e.depth:0;
+ B.innerHTML=e?e.lines.map(l=>'<div class="an-pv"><b>'+fmt(l)+'</b><span class="an-d">prof. '+l.depth+'</span><span class="an-t">'+pvNum(s,l.pv,10)+"</span></div>").join(""):"";
+ I.textContent=
+  cur&&cur.state==="err"?"Error: "+cur.err+(pd?" · prof. "+pd:""):
+  e&&e.done?"Análisis completo ✓ · prof. "+pd+(pd<lim.d?" (límite de "+lim.ms/1000+" s)":""):
+  gameBusy?"En pausa mientras se analiza la partida…"+(pd?" · prof. "+pd:""):
+  cur&&cur.state==="run"?"Analizando… prof. "+pd+" de "+lim.d:
+  cur&&cur.state==="boot"?"Iniciando Stockfish…":
+  pd?"Análisis detenido · prof. "+pd:"Preparando análisis…";
+ drawArrow();updBar()}
 function setWarn(w){const e=$("anWarn");e.textContent="";if(!w||!w.length){e.hidden=true;return}e.hidden=false;
  w.forEach(t=>{const d=document.createElement("div");d.textContent="⚠ "+t;e.appendChild(d)})}
 function depthNote(){const rg=a=>{if(!a.length)return"–";const x=Math.min(...a),y=Math.max(...a);return x===y?""+x:x+"–"+y};
@@ -11455,7 +11596,8 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
   if(q)d.appendChild(createPieceElement(q===q.toUpperCase()?"w":"b",q.toUpperCase(),"piece","piece-image"));
   if(last&&cl&&last.to===i&&/inac|mist|blun/.test(cl.k)){const b=document.createElement("span");b.className="an-bd";b.style.background=CL[cl.k][1];b.textContent=CL[cl.k][0];d.appendChild(b)}
   B.appendChild(d)}
- const e=an.ev[an.ply];$("anBar").classList.toggle("fl",an.flip);$("anFill").style.height=(e?wp(e.cp):50)+"%";$("anEv").textContent=fmt(e);
+ B.appendChild(arrowSvg);
+ const e=an.ev[an.ply];
  const nm=c=>(g.H[c==="w"?"White":"Black"]||(c==="w"?"Blancas":"Negras")),pl=c=>{const a=accOf(c);return"<b>"+nm(c)+"</b><span>"+(a===null?"":"Precisión "+a.toFixed(1)+"%")+"</span>"};
  $("anTop").innerHTML=pl(an.flip?"w":"b");$("anBot").innerHTML=pl(an.flip?"b":"w");
  let t="";if(last&&cl){t+='<b style="color:'+CL[cl.k][1]+'">'+last.san+" "+CL[cl.k][0]+"</b> "+CL[cl.k][2];const pb=an.ev[an.ply-1]&&an.ev[an.ply-1].bm;
@@ -11466,19 +11608,26 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
  const S=$("anSum");if(!an.cl.some(Boolean)){S.hidden=true;return}S.hidden=false;
  const cnt=(c,k)=>an.cl.filter((x,i)=>x&&x.k===k&&g.moves[i].col===c).length,aw=accOf("w"),ab=accOf("b");
  S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()}
-const go=p=>{if(!an.g)return;const np=Math.max(0,Math.min(an.g.moves.length,p));if(np!==an.ply&&deepBusy)deepStop();an.ply=np;anRender()};
+const go=p=>{if(!an.g)return;const np=Math.max(0,Math.min(an.g.moves.length,p)),ch=np!==an.ply;an.ply=np;if(ch)autoKick();anRender()};
 function anLoad(txt,auto){try{const g=loadText(txt);anStop();an=newAn(g);setWarn(g.warn);
- $("anErr").textContent="";$("anLoad").hidden=true;$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";anRender();if(auto)anAnalyze()}
+ $("anErr").textContent="";$("anLoad").hidden=true;$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";anRender();if(auto)anAnalyze();else autoKick()}
  catch(e){$("anErr").textContent=e.message;$("anLoad").hidden=false}}
 function anOpen(txt,auto){anBack=resultOverlay.style.display==="flex";resultOverlay.style.display="none";$("anOverlay").style.display="block";document.body.style.overflow="hidden";
  anStop();an=newAn(emptyG());setWarn([]);$("anErr").textContent="";$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";
  if(txt){$("anText").value=txt;anLoad(txt,auto)}else{$("anLoad").hidden=false;anRender()}}
 function anGame(){anOpen(buildPGN(),true);if(mode==="bot"&&playerColor==="b"){an.flip=true;anRender()}}
-function anClose(){anStop();$("anOverlay").style.display="none";document.body.style.overflow="";if(anBack)resultOverlay.style.display="flex"}
+function anClose(){anStop();aeKill();$("anOverlay").style.display="none";document.body.style.overflow="";if(anBack)resultOverlay.style.display="flex"}
 $("anClose").onclick=anClose;$("anPaste").onclick=()=>{$("anLoad").hidden=!$("anLoad").hidden};
 $("anGo").onclick=()=>anLoad($("anText").value,true);
 $("anEx").onclick=()=>{$("anText").value="1. e4 e5 2. Nf3 d6 3. d4 Bg4 4. dxe5 Bxf3 5. Qxf3 dxe5 6. Bc4 Nf6 7. Qb3 Qe7 8. Nc3 c6 9. Bg5 b5 10. Nxb5 cxb5 11. Bxb5+ Nbd7 12. O-O-O Rd8 13. Rxd7 Rxd7 14. Rd1 Qe6 15. Bxd7+ Nxd7 16. Qb8+ Nxb8 17. Rd8# 1-0"};
-$("anRun").onclick=()=>an.g&&anAnalyze();$("anDeep").onclick=anDeep;
+$("anRun").onclick=()=>an.g&&anAnalyze();
+/* Interruptor del análisis automático + aviso de límites según dispositivo */
+{const au=$("anAuto"),lim=limits();au.checked=autoOn;
+ $("anAutoHint").textContent="Flecha de la mejor jugada desde prof. "+ARROW_MIN_D+" con "+ARROW_STABLE+" profundidades estables · se detiene a prof. "+lim.d+" o "+lim.ms/1000+" s"+(isMobile()?" (modo móvil)":"")+".";
+ au.onchange=()=>{autoOn=au.checked;try{localStorage.setItem(AUTO_KEY,autoOn?"1":"0")}catch(_){}
+  if(autoOn)autoKick(0);else{AE.job++;clearTimeout(AE.t);AE.cur=null;aeKill();deepRender()}}}
+/* Pestaña oculta: se pausa el motor para no gastar batería; al volver se reanuda */
+document.addEventListener("visibilitychange",()=>{if($("anOverlay").style.display==="block")autoKick(document.hidden?0:250)});
 $("anFirst").onclick=()=>go(0);$("anPrev").onclick=()=>go(an.ply-1);$("anNext").onclick=()=>go(an.ply+1);$("anLast").onclick=()=>an.g&&go(an.g.moves.length);
 $("anFlip").onclick=()=>{an.flip=!an.flip;anRender()};
 $("anMoves").onclick=e=>{const b=e.target.closest("[data-p]");if(b)go(+b.dataset.p)};
