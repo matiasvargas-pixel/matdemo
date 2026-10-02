@@ -171,17 +171,25 @@ body{
 }
 
 .copyright-note{
-    position:fixed;
-    right:14px;
-    bottom:10px;
-    z-index:1;
-    max-width:calc(100% - 28px);
-    text-align:right;
-    font-size:11px;
+    text-align:center;
+    font-size:12px;
+    font-weight:800;
+    letter-spacing:.3px;
     line-height:1.4;
-    color:rgba(197,208,216,.55);
+    color:#fff;
+    opacity:1;
+    text-shadow:0 1px 3px rgba(0,0,0,.95);
+    padding:12px 14px;
     pointer-events:none;
     user-select:none;
+}
+
+.copyright-note.copyright-fixed{
+    position:absolute;
+    left:0;
+    right:0;
+    bottom:6px;
+    z-index:1;
 }
 
 .start-card{
@@ -2826,7 +2834,8 @@ button:active{
 .an-mv{padding:4px 6px;background:#1b2833;font-size:12px}
 .an-mv.on{background:#397ff0}
 .an-mv small{margin-left:3px;font-weight:900}
-.an-bd{position:absolute;top:2px;right:2px;z-index:5;min-width:18px;height:18px;border-radius:9px;color:#111;font:900 10px/18px sans-serif;text-align:center}
+.an-bd{position:absolute;top:2px;right:2px;z-index:20;min-width:21.6px;height:21.6px;border-radius:10.8px;color:#111;font:900 12px/21.6px sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+.an-bd.k-brill,.an-bd.k-great{color:#fff}
 .an-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:700;background:#14b8a6;color:#06231f;padding:10px 18px;border-radius:9px;font-weight:800;font-size:13px}
 #resultOverlay .modal{position:relative}
 #resultOverlay .result-x{position:absolute;top:10px;right:10px;width:32px;height:32px;min-width:0;padding:0;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;color:#c5d0d8;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center}
@@ -2920,6 +2929,8 @@ button:active{
 
     </div>
 
+    <div class="copyright-note copyright-fixed">© 2026 v10.5 · Matías José Vargas Rodríguez · Todos los derechos reservados</div>
+
 </div>
 
 
@@ -2931,8 +2942,6 @@ button:active{
     id="startScreen"
     class="start-screen"
 >
-
-    <div class="copyright-note">© 2026 Matías José Vargas Rodríguez · Todos los derechos reservados</div>
 
     <div class="start-card">
 
@@ -3893,6 +3902,8 @@ button:active{
 </aside>
 
 </main>
+
+<footer class="copyright-note">© 2026 v10.5 · Matías José Vargas Rodríguez · Todos los derechos reservados</footer>
 
 
 <!-- =========================================================
@@ -11158,7 +11169,7 @@ boardElement.addEventListener("pointerdown", function(event){
    <div class="an-card an-warn" id="anWarn" hidden></div>
    <div class="an-card"><div class="card-title">Análisis con Stockfish</div>
     <div class="an-row" style="margin-top:0"><select id="anSpeed"><option value="200,10">Rápido</option><option value="500,14" selected>Normal</option><option value="1200,18">Profundo</option></select><button id="anRun" class="an-accent">Analizar</button></div>
-    <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones y errores con mayor profundidad</span></label>
+    <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones, errores y jugadas brillantes / grandes con mayor profundidad</span></label>
     <div class="progress"><div id="anProg" class="progress-fill" style="width:0"></div></div><div class="an-info" id="anInfo">Listo para analizar.</div></div>
    <div class="an-card" id="anPos"><div class="card-title">Posición actual</div>
     <label class="an-sw"><span>🔎 Análisis automático · 3 líneas</span><input type="checkbox" id="anAuto"><i></i></label>
@@ -11168,6 +11179,7 @@ boardElement.addEventListener("pointerdown", function(event){
    <div class="an-card"><div class="card-title">Jugadas</div><div id="anMoves" class="an-moves"></div></div>
   </div>
  </div>
+<div class="copyright-note">© 2026 v10.5 · Matías José Vargas Rodríguez · Todos los derechos reservados</div>
 </div></div>
 
 <script>
@@ -11341,9 +11353,9 @@ $("mvMenu").onclick=e=>{const a=e.target.closest("button");if(!a||a.disabled)ret
  if(a.dataset.a==="fen")copy(curFEN(),"FEN");else if(a.dataset.a==="pgn")copy(buildPGN(),"PGN");else anGame()};
 
 /* ---------- Analizador con Stockfish (worker propio) ---------- */
-const CL={best:["★","#96bc4b","Mejor"],exc:["!","#8fc65a","Excelente"],good:["✓","#a4b4a0","Bueno"],inac:["?!","#f6c23e","Imprecisión"],mist:["?","#f08a24","Error"],blun:["??","#e04848","Error grave"]};
+const CL={brill:["!!","#1baca6","Brillante"],great:["!","#5c8bb0","Gran movimiento"],best:["★","#96bc4b","Mejor"],exc:["!","#8fc65a","Excelente"],good:["✓","#a4b4a0","Bueno"],inac:["?!","#f6c23e","Imprecisión"],mist:["?","#f08a24","Error"],blun:["??","#e04848","Error grave"]};
 const wp=cp=>50+50*(2/(1+Math.exp(-.00368208*Math.max(-1500,Math.min(1500,cp))))-1);
-const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
+const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun/,REV=/brill|great|inac|mist|blun/,BADGE=/brill|great|inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
 const newAn=g=>({g,ply:0,ev:[],cl:[],flip:false,p2:null});
 let an=newAn(null),anW=null,anRun=0,anBack=false,gameBusy=false;
 const anWs=new Set(),pend=new Set();
@@ -11390,12 +11402,31 @@ function search(w,fen,depth,ms,opt){opt=opt||{};return new Promise((res,rej)=>{
 const lineE=(L,sg)=>({cp:(L.k==="mate"?(L.v>0?1:-1)*(1e4-Math.abs(L.v)):L.v)*sg,mate:L.k==="mate"?L.v*sg:null,pv:L.pv,depth:L.depth});
 async function evalPos(w,s,dp,ms){
  if(!MC.legal(s).length){const ck=MC.inCheck(s);return{cp:ck?(s.t==="w"?-1e4:1e4):0,mate:ck?0:null,pv:[],term:1,depth:0}}
- const r=await search(w,MC.toFEN(s),dp,ms),L=r.lines[0]||{k:"cp",v:0,pv:[],depth:0},e=lineE(L,s.t==="w"?1:-1);
- if(!e.pv.length)e.pv=[r.bm];e.bm=r.bm;return e}
-function classify(e0,e1,m){const a=wp(e0.cp),b=wp(e1.cp),loss=Math.max(0,m.col==="w"?a-b:b-a);
- const k=(loss<=.5||e0.bm===m.uci)?"best":loss<=2?"exc":loss<=5?"good":loss<=10?"inac":loss<=20?"mist":"blun";
+ const sg=s.t==="w"?1:-1,r=await search(w,MC.toFEN(s),dp,ms,{multi:2}),L=r.lines[0]||{k:"cp",v:0,pv:[],depth:0},e=lineE(L,sg);
+ if(!e.pv.length)e.pv=[r.bm];e.bm=r.bm;
+ if(r.lines[1])e.alt=lineE(r.lines[1],sg);   /* 2ª mejor jugada: sirve para detectar movimientos únicos */
+ return e}
+/* Material (en peones) desde el punto de vista de c, para detectar sacrificios. */
+const PVAL={P:1,N:3,B:3,R:5,Q:9};
+const matDiff=(s,c)=>{let t=0;for(let i=0;i<64;i++){const q=s.b[i];if(!q)continue;t+=(q===q.toUpperCase()?1:-1)*(PVAL[q.toUpperCase()]||0)}return c==="w"?t:-t};
+const moverWp=(e,c)=>c==="w"?wp(e.cp):100-wp(e.cp);
+/* Sacrificio: siguiendo la línea del motor tras la jugada, quien movió queda con al menos 2 peones menos de material. */
+function isSacrifice(s0,m,e1){
+ try{
+  const base=matDiff(s0,m.col),pv=(e1.pv||[]).slice(0,6);let s=MC.make(s0,m),fin=matDiff(s,m.col);
+  for(let k=0;k<pv.length;k++){const mv=MC.parse(s,pv[k],MC.legal(s));if(!mv)break;const cap=!!s.b[mv.to]||!!mv.ep;s=MC.make(s,mv);
+   if(k%2===1||pv.length===1){fin=matDiff(s,m.col);if(k%2===1&&!cap&&base-fin>=2)return true}}   /* tras una jugada tranquila de quien sacrifica sigue 2+ peones abajo */
+  return base-fin>=2}
+ catch(_){return false}}
+function classify(e0,e1,m,s0,rec){const a=wp(e0.cp),b=wp(e1.cp),loss=Math.max(0,m.col==="w"?a-b:b-a);
+ let k=(loss<=.5||e0.bm===m.uci)?"best":loss<=2?"exc":loss<=5?"good":loss<=10?"inac":loss<=20?"mist":"blun";
+ const w0=moverWp(e0,m.col),w1=moverWp(e1,m.col);
+ /* Brillante: jugada muy buena que sacrifica material, sin estar ya ganando de sobra y sin quedar peor. */
+ if((k==="best"||k==="exc")&&s0&&w1>=45&&w0<85&&isSacrifice(s0,m,e1))k="brill";
+ /* Gran movimiento: la mejor jugada y la única que mantiene la posición (la 2ª mejor es mucho peor); no vale una recaptura simple. */
+ else if(k==="best"&&!rec&&e0.alt&&w1>=30&&w0-moverWp(e0.alt,m.col)>=15)k="great";
  return{k,acc:Math.max(0,Math.min(100,103.1668*Math.exp(-.04354*loss)-3.1669))}}
-const cls=(A,i)=>classify(A.ev[i],A.ev[i+1],A.g.moves[i]);
+const cls=(A,i)=>{const g=A.g,m=g.moves[i],pm=i>0?g.moves[i-1]:null,rec=!!(pm&&pm.to===m.to&&g.states[i-1].b[pm.to]);return classify(A.ev[i],A.ev[i+1],m,g.states[i],rec)};
 
 async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
  const[ms,dp]=$("anSpeed").value.split(",").map(Number),two=$("anTwo").checked;
@@ -11413,9 +11444,9 @@ async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
    prog(share*(i+1)/N);$("anInfo").textContent="Analizando posición "+(i+1)+" de "+N+(e.depth?" · prof. "+e.depth:"")+"…";anRender()}
   let tail="";
   if(two){
-   /* Segunda pasada: solo las posiciones (antes y después) de imprecisiones, errores y errores graves. */
+   /* Segunda pasada: solo las posiciones (antes y después) de imprecisiones, errores, errores graves y jugadas brillantes / grandes (para confirmarlas). */
    const badMoves=[],set=new Set();
-   A.cl.forEach((c,i)=>{if(c&&BAD.test(c.k)){badMoves.push(i);set.add(i);set.add(i+1)}});
+   A.cl.forEach((c,i)=>{if(c&&REV.test(c.k)){badMoves.push(i);set.add(i);set.add(i+1)}});
    const list=[...set].sort((a,b)=>a-b).filter(i=>!A.ev[i].term),dp2=dp+6,ms2=ms*3,before=new Map(badMoves.map(i=>[i,A.cl[i].k]));
    A.p2={dp:dp2,total:list.length,done:0,changed:0};
    try{
@@ -11429,7 +11460,7 @@ async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
      prog(70+30*(k+1)/list.length);anRender()}
    }catch(e){if(e.cancelled||my!==anRun)throw e;tail=" · la segunda pasada se interrumpió: "+e.message}
    A.p2.changed=badMoves.filter(i=>A.cl[i].k!==before.get(i)).length;
-   if(!tail)tail=list.length?" · 2ª pasada: "+list.length+" posiciones a mayor profundidad":" · sin imprecisiones ni errores que revisar"}
+   if(!tail)tail=list.length?" · 2ª pasada: "+list.length+" posiciones a mayor profundidad":" · sin jugadas que revisar"}
   prog(100);$("anInfo").textContent="Análisis completo ✓"+tail;anRender()}
  catch(e){if(my===anRun&&!e.cancelled)$("anInfo").textContent="Error: "+e.message}
  finally{killW(w);if(my===anRun){gameBusy=false;autoKick(0)}}}
@@ -11619,7 +11650,7 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
  for(let vr=0;vr<8;vr++)for(let vc=0;vc<8;vc++){const r=an.flip?7-vr:vr,c=an.flip?7-vc:vc,i=r*8+c,q=s.b[i],d=document.createElement("div");
   d.className="square "+((r+c)%2?"dark":"light")+(last&&(last.f===i||last.to===i)?" last-move":"");
   if(q)d.appendChild(createPieceElement(q===q.toUpperCase()?"w":"b",q.toUpperCase(),"piece","piece-image"));
-  if(last&&cl&&last.to===i&&/inac|mist|blun/.test(cl.k)){const b=document.createElement("span");b.className="an-bd";b.style.background=CL[cl.k][1];b.textContent=CL[cl.k][0];d.appendChild(b)}
+  if(last&&cl&&last.to===i&&BADGE.test(cl.k)){const b=document.createElement("span");b.className="an-bd k-"+cl.k;b.style.background=CL[cl.k][1];b.textContent=CL[cl.k][0];d.appendChild(b)}
   B.appendChild(d)}
  B.appendChild(arrowSvg);
  const e=an.ev[an.ply];
@@ -11628,8 +11659,11 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
  let t="";if(last&&cl){t+='<b style="color:'+CL[cl.k][1]+'">'+last.san+" "+CL[cl.k][0]+"</b> "+CL[cl.k][2];const pb=an.ev[an.ply-1]&&an.ev[an.ply-1].bm;
   if(pb&&pb!==last.uci&&/inac|mist|blun/.test(cl.k))t+=" · mejor era <b>"+pvSan(g.states[an.ply-1],[pb])+"</b>"}
  if(e&&e.pv.length)t+=(t?"<br>":"")+"Línea del motor"+(e.depth?" (prof. "+e.depth+(e.pass===2?" · 2ª pasada":"")+")":"")+": "+pvSan(s,e.pv.slice(0,6));$("anLine").innerHTML=t;deepRender();
- $("anMoves").innerHTML=g.moves.map((m,i)=>(m.col==="w"||i===0?'<span class="an-n">'+m.n+(m.col==="w"?".":"…")+"</span>":"")+'<button class="an-mv'+(an.ply===i+1?" on":"")+'" data-p="'+(i+1)+'">'+m.san+(an.cl[i]?'<small style="color:'+CL[an.cl[i].k][1]+'">'+CL[an.cl[i].k][0]+"</small>":"")+"</button>").join("")||'<span class="an-info">Sin jugadas (solo posición).</span>';
- const on=$("anMoves").querySelector(".on");if(on)on.scrollIntoView({block:"nearest"});
+ const mv=$("anMoves"),mvTop=mv.scrollTop;mv.innerHTML=g.moves.map((m,i)=>(m.col==="w"||i===0?'<span class="an-n">'+m.n+(m.col==="w"?".":"…")+"</span>":"")+'<button class="an-mv'+(an.ply===i+1?" on":"")+'" data-p="'+(i+1)+'">'+m.san+(an.cl[i]?'<small style="color:'+CL[an.cl[i].k][1]+'">'+CL[an.cl[i].k][0]+"</small>":"")+"</button>").join("")||'<span class="an-info">Sin jugadas (solo posición).</span>';
+ mv.scrollTop=mvTop;/* conserva el scroll tras reconstruir la lista */
+ {const on=mv.querySelector(".on");if(on){/* solo se mueve el contenedor de jugadas, y solo si la jugada activa queda fuera de vista (sin scrollIntoView: no arrastra la página) */
+  const cr=mv.getBoundingClientRect(),or=on.getBoundingClientRect();
+  if(or.top<cr.top)mv.scrollTop+=or.top-cr.top-4;else if(or.bottom>cr.bottom)mv.scrollTop+=or.bottom-cr.bottom+4}}
  const S=$("anSum");if(!an.cl.some(Boolean)){S.hidden=true;return}S.hidden=false;
  const cnt=(c,k)=>an.cl.filter((x,i)=>x&&x.k===k&&g.moves[i].col===c).length,aw=accOf("w"),ab=accOf("b");
  S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()}
