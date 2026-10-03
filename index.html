@@ -2836,6 +2836,10 @@ button:active{
 .an-mv small{margin-left:3px;font-weight:900}
 .an-bd{position:absolute;top:2px;right:2px;z-index:20;min-width:21.6px;height:21.6px;border-radius:10.8px;color:#000;font:900 12px/21.6px sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.45)}
 .an-bd.k-brill,.an-bd.k-great{color:#000}
+/* Símbolos de clasificación siempre en negrita (★ ✦ ✓ no tienen peso bold en la fuente, se refuerzan con trazo) */
+.an-bd,.an-mv small,.sy{font-family:Arial,Helvetica,sans-serif;font-weight:900}
+.an-bd.k-best,.an-bd.k-exc,.an-bd.k-good,.an-mv small.k-best,.an-mv small.k-exc,.an-mv small.k-good,.sy.k-best,.sy.k-exc,.sy.k-good{-webkit-text-stroke:.9px currentColor;paint-order:stroke fill}
+.an-bd.k-brill,.an-bd.k-great,.an-bd.k-inac,.an-bd.k-mist,.an-bd.k-blun,.an-mv small.k-brill,.an-mv small.k-great,.an-mv small.k-inac,.an-mv small.k-mist,.an-mv small.k-blun,.sy.k-brill,.sy.k-great,.sy.k-inac,.sy.k-mist,.sy.k-blun{-webkit-text-stroke:.3px currentColor}
 .an-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:700;background:#14b8a6;color:#06231f;padding:10px 18px;border-radius:9px;font-weight:800;font-size:13px}
 #resultOverlay .modal{position:relative}
 #resultOverlay .result-x{position:absolute;top:10px;right:10px;width:32px;height:32px;min-width:0;padding:0;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;color:#c5d0d8;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center}
@@ -11355,6 +11359,7 @@ $("mvMenu").onclick=e=>{const a=e.target.closest("button");if(!a||a.disabled)ret
 /* ---------- Analizador con Stockfish (worker propio) ---------- */
 /* Categorías (tabla "Configuración definitiva"): colores y nombres como Chess.com */
 const CL={brill:["!!","#21C4A4","Brillante"],great:["!","#1f78e0","Genial"],best:["★","#2eb82e","Mejor"],exc:["✦","#4cc24a","Excelente"],good:["✓","#74c95c","Bien"],inac:["?!","#f2d216","Imprecisión"],mist:["?","#f27d12","Error"],blun:["??","#e5232f","Error grave"]};
+const SY=k=>'<span class="sy k-'+k+'">'+CL[k][0]+"</span>";
 /* Cortes de pérdida en puntos de probabilidad (2 = 0.02 de Expected Points). Mejor tolera el ruido entre búsquedas. */
 const TH={BEST:.3,EXC:2,GOOD:5,INAC:10,MIST:20,
  ZLOST:30,ZWON:70,          /* zonas: perdido ≤30, ganado ≥70 */
@@ -11670,8 +11675,10 @@ function pvSan(s,pv){const o=[];for(const u of pv){const L=MC.legal(s),m=MC.pars
 function accOf(c){const a=an.cl.map((x,i)=>x&&an.g.moves[i].col===c?x.acc:null).filter(x=>x!==null);if(!a.length)return null;
  return(a.reduce((p,x)=>p+x,0)/a.length+a.length/a.reduce((p,x)=>p+1/Math.max(x,1),0))/2}
 function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.ply?g.moves[an.ply-1]:null,cl=an.cl[an.ply-1],B=$("anBoard");B.innerHTML="";
+ /* Jaque: casilla del rey en rojo parpadeante (misma clase .check que la partida contra el bot) */
+ const ckSq=MC.inCheck(s)?s.b.indexOf(s.t==="w"?"K":"k"):-1;
  for(let vr=0;vr<8;vr++)for(let vc=0;vc<8;vc++){const r=an.flip?7-vr:vr,c=an.flip?7-vc:vc,i=r*8+c,q=s.b[i],d=document.createElement("div");
-  d.className="square "+((r+c)%2?"dark":"light")+(last&&(last.f===i||last.to===i)?" last-move":"");
+  d.className="square "+((r+c)%2?"dark":"light")+(last&&(last.f===i||last.to===i)?" last-move":"")+(i===ckSq?" check":"");
   if(q)d.appendChild(createPieceElement(q===q.toUpperCase()?"w":"b",q.toUpperCase(),"piece","piece-image"));
   if(last&&cl&&last.to===i&&BADGE.test(cl.k)){const b=document.createElement("span");b.className="an-bd k-"+cl.k;b.style.background=CL[cl.k][1];b.textContent=CL[cl.k][0];d.appendChild(b)}
   B.appendChild(d)}
@@ -11681,17 +11688,17 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
  const e=an.ev[an.ply];
  const nm=c=>(g.H[c==="w"?"White":"Black"]||(c==="w"?"Blancas":"Negras")),pl=c=>{const a=accOf(c);return"<b>"+nm(c)+"</b><span>"+(a===null?"":"Precisión "+a.toFixed(1)+"%")+"</span>"};
  $("anTop").innerHTML=pl(an.flip?"w":"b");$("anBot").innerHTML=pl(an.flip?"b":"w");
- let t="";if(last&&cl){t+='<b style="color:'+CL[cl.k][1]+'">'+last.san+" "+CL[cl.k][0]+"</b> "+CL[cl.k][2];const pb=an.ev[an.ply-1]&&an.ev[an.ply-1].bm;
+ let t="";if(last&&cl){t+='<b style="color:'+CL[cl.k][1]+'">'+last.san+" "+SY(cl.k)+"</b> "+CL[cl.k][2];const pb=an.ev[an.ply-1]&&an.ev[an.ply-1].bm;
   if(pb&&pb!==last.uci&&/inac|mist|blun/.test(cl.k))t+=" · mejor era <b>"+pvSan(g.states[an.ply-1],[pb])+"</b>"}
  if(e&&e.pv.length)t+=(t?"<br>":"")+"Línea del motor"+(e.depth?" (prof. "+e.depth+(e.pass===2?" · 2ª pasada":"")+")":"")+": "+pvSan(s,e.pv.slice(0,6));$("anLine").innerHTML=t;deepRender();
- const mv=$("anMoves"),mvTop=mv.scrollTop;mv.innerHTML=g.moves.map((m,i)=>(m.col==="w"||i===0?'<span class="an-n">'+m.n+(m.col==="w"?".":"…")+"</span>":"")+'<button class="an-mv'+(an.ply===i+1?" on":"")+'" data-p="'+(i+1)+'">'+m.san+(an.cl[i]?'<small style="color:'+CL[an.cl[i].k][1]+'">'+CL[an.cl[i].k][0]+"</small>":"")+"</button>").join("")||'<span class="an-info">Sin jugadas (solo posición).</span>';
+ const mv=$("anMoves"),mvTop=mv.scrollTop;mv.innerHTML=g.moves.map((m,i)=>(m.col==="w"||i===0?'<span class="an-n">'+m.n+(m.col==="w"?".":"…")+"</span>":"")+'<button class="an-mv'+(an.ply===i+1?" on":"")+'" data-p="'+(i+1)+'">'+m.san+(an.cl[i]?'<small class="k-'+an.cl[i].k+'" style="color:'+CL[an.cl[i].k][1]+'">'+CL[an.cl[i].k][0]+"</small>":"")+"</button>").join("")||'<span class="an-info">Sin jugadas (solo posición).</span>';
  mv.scrollTop=mvTop;/* conserva el scroll tras reconstruir la lista */
  {const on=mv.querySelector(".on");if(on){/* solo se mueve el contenedor de jugadas, y solo si la jugada activa queda fuera de vista (sin scrollIntoView: no arrastra la página) */
   const cr=mv.getBoundingClientRect(),or=on.getBoundingClientRect();
   if(or.top<cr.top)mv.scrollTop+=or.top-cr.top-4;else if(or.bottom>cr.bottom)mv.scrollTop+=or.bottom-cr.bottom+4}}
  const S=$("anSum");if(!an.cl.some(Boolean)){S.hidden=true;return}S.hidden=false;
  const cnt=(c,k)=>an.cl.filter((x,i)=>x&&x.k===k&&g.moves[i].col===c).length,aw=accOf("w"),ab=accOf("b");
- S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()}
+ S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+SY(k)+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()}
 /* ---------- Animación y sonidos del tablero de análisis (mismos que en la partida) ---------- */
 let anGhosts=[],anHidden=[],anAnimDest=[],anAnimT=null;
 function anCancelAnim(){clearTimeout(anAnimT);anGhosts.forEach(g=>g.remove());anHidden.forEach(el=>{el.style.visibility=""});anGhosts=[];anHidden=[];anAnimDest=[]}
