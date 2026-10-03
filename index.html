@@ -2834,7 +2834,7 @@ button:active{
 .an-mv{padding:4px 6px;background:#1b2833;font-size:12px}
 .an-mv.on{background:#397ff0}
 .an-mv small{margin-left:3px;font-weight:900}
-.an-bd{position:absolute;top:2px;right:2px;z-index:20;min-width:21.6px;height:21.6px;border-radius:10.8px;color:#111;font:900 12px/21.6px sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.45)}
+.an-bd{position:absolute;top:2px;right:2px;z-index:20;min-width:21.6px;height:21.6px;border-radius:10.8px;color:#fff;font:900 12px/21.6px sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.45)}
 .an-bd.k-brill,.an-bd.k-great{color:#fff}
 .an-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:700;background:#14b8a6;color:#06231f;padding:10px 18px;border-radius:9px;font-weight:800;font-size:13px}
 #resultOverlay .modal{position:relative}
@@ -11168,7 +11168,7 @@ boardElement.addEventListener("pointerdown", function(event){
     <div class="an-err" id="anErr"></div></div>
    <div class="an-card an-warn" id="anWarn" hidden></div>
    <div class="an-card"><div class="card-title">Análisis con Stockfish</div>
-    <div class="an-row" style="margin-top:0"><select id="anSpeed"><option value="200,10">Rápido</option><option value="500,14" selected>Normal</option><option value="1200,18">Profundo</option></select><button id="anRun" class="an-accent">Analizar</button></div>
+    <div class="an-row" style="margin-top:0"><select id="anSpeed"><option value="200,10" selected>Rápido</option><option value="500,14">Normal</option><option value="1200,18">Profundo</option></select><button id="anRun" class="an-accent">Analizar</button></div>
     <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones, errores y jugadas brillantes / geniales con mayor profundidad</span></label>
     <div class="progress"><div id="anProg" class="progress-fill" style="width:0"></div></div><div class="an-info" id="anInfo">Listo para analizar.</div></div>
    <div class="an-card" id="anPos"><div class="card-title">Posición actual</div>
@@ -11354,7 +11354,7 @@ $("mvMenu").onclick=e=>{const a=e.target.closest("button");if(!a||a.disabled)ret
 
 /* ---------- Analizador con Stockfish (worker propio) ---------- */
 /* Categorías (tabla "Configuración definitiva"): colores y nombres como Chess.com */
-const CL={brill:["!!","#9b6df0","Brillante"],great:["!","#1f78e0","Genial"],best:["★","#2eb82e","Mejor"],exc:["✓","#4cc24a","Excelente"],good:["•","#74c95c","Bien"],inac:["?!","#f2d216","Imprecisión"],mist:["?","#f27d12","Error"],blun:["??","#e5232f","Error grave"]};
+const CL={brill:["!!","#21C4A4","Brillante"],great:["!","#1f78e0","Genial"],best:["★","#2eb82e","Mejor"],exc:["✦","#4cc24a","Excelente"],good:["✓","#74c95c","Bien"],inac:["?!","#f2d216","Imprecisión"],mist:["?","#f27d12","Error"],blun:["??","#e5232f","Error grave"]};
 /* Cortes de pérdida en puntos de probabilidad (2 = 0.02 de Expected Points). Mejor tolera el ruido entre búsquedas. */
 const TH={BEST:.3,EXC:2,GOOD:5,INAC:10,MIST:20,
  ZLOST:30,ZWON:70,          /* zonas: perdido ≤30, ganado ≥70 */
@@ -11366,7 +11366,7 @@ const TH={BEST:.3,EXC:2,GOOD:5,INAC:10,MIST:20,
 const WP_K=.00368208;
 const wp=cp=>50+50*(2/(1+Math.exp(-WP_K*Math.max(-1500,Math.min(1500,cp))))-1);
 const accFromLoss=l=>Math.max(0,Math.min(100,103.1668*Math.exp(-.04354*l)-3.1669));
-const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun/,REV=/brill|great|inac|mist|blun/,BADGE=/brill|great|inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
+const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun/,REV=/brill|great|inac|mist|blun/,BADGE=/brill|great|best|exc|good|inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
 const newAn=g=>({g,ply:0,ev:[],cl:[],flip:false,p2:null});
 let an=newAn(null),anW=null,anRun=0,anBack=false,gameBusy=false;
 const anWs=new Set(),pend=new Set();
