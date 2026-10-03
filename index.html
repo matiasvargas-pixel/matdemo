@@ -2835,7 +2835,7 @@ button:active{
 .an-mv.on{background:#397ff0}
 .an-mv small{margin-left:3px;font-weight:900}
 .an-bd{position:absolute;top:2px;right:2px;z-index:20;min-width:21.6px;height:21.6px;border-radius:10.8px;color:#111;font:900 12px/21.6px sans-serif;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,.45)}
-.an-bd.k-brill,.an-bd.k-great,.an-bd.k-miss{color:#fff}.an-cal input{width:46px;background:#080f15;color:#fff;border:1px solid rgba(255,255,255,.15);border-radius:6px;padding:3px 4px;font-size:12px}.an-cal button{background:#1b2833;color:#fff;border:0;border-radius:6px;padding:4px 8px;font-size:12px;margin:2px 2px 0 0;cursor:pointer}
+.an-bd.k-brill,.an-bd.k-great{color:#fff}
 .an-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:700;background:#14b8a6;color:#06231f;padding:10px 18px;border-radius:9px;font-weight:800;font-size:13px}
 #resultOverlay .modal{position:relative}
 #resultOverlay .result-x{position:absolute;top:10px;right:10px;width:32px;height:32px;min-width:0;padding:0;border-radius:50%;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.12);box-shadow:none;color:#c5d0d8;font-size:15px;line-height:1;display:flex;align-items:center;justify-content:center}
@@ -11169,7 +11169,7 @@ boardElement.addEventListener("pointerdown", function(event){
    <div class="an-card an-warn" id="anWarn" hidden></div>
    <div class="an-card"><div class="card-title">Análisis con Stockfish</div>
     <div class="an-row" style="margin-top:0"><select id="anSpeed"><option value="200,10">Rápido</option><option value="500,14" selected>Normal</option><option value="1200,18">Profundo</option></select><button id="anRun" class="an-accent">Analizar</button></div>
-    <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones, errores, fallos y jugadas brillantes / geniales con mayor profundidad</span></label>
+    <label class="an-opt"><input type="checkbox" id="anTwo" checked><span>Segunda pasada: reanalizar solo imprecisiones, errores y jugadas brillantes / geniales con mayor profundidad</span></label>
     <div class="progress"><div id="anProg" class="progress-fill" style="width:0"></div></div><div class="an-info" id="anInfo">Listo para analizar.</div></div>
    <div class="an-card" id="anPos"><div class="card-title">Posición actual</div>
     <label class="an-sw"><span>🔎 Análisis automático · 3 líneas</span><input type="checkbox" id="anAuto"><i></i></label>
@@ -11354,25 +11354,19 @@ $("mvMenu").onclick=e=>{const a=e.target.closest("button");if(!a||a.disabled)ret
 
 /* ---------- Analizador con Stockfish (worker propio) ---------- */
 /* Categorías (tabla "Configuración definitiva"): colores y nombres como Chess.com */
-const CL={brill:["!!","#9b6df0","Brillante"],great:["!","#1f78e0","Genial"],best:["★","#2eb82e","Mejor"],exc:["✓","#4cc24a","Excelente"],good:["•","#74c95c","Bien"],miss:["×","#ee6f8b","Fallo"],inac:["?!","#f2d216","Imprecisión"],mist:["?","#f27d12","Error"],blun:["??","#e5232f","Error grave"]};
-/* Umbrales con nombre. Pérdidas en puntos de probabilidad (2 = 0.02 de Expected Points). */
-const TH={BEST:.3,EXC:2,GOOD:5,INAC:10,MIST:20,           /* cortes de pérdida (Mejor tolera ruido entre búsquedas) */
- ZLOST:30,ZWON:70,SWING:4,                                /* zonas: perdido ≤30, ganado ≥70; mejora mínima para "cambia el curso" */
- UNIQ:15,GREAT_MAXW0:95,GREAT_MINW1:30,                   /* jugada única: la 2ª mejor es ≥15 peor */
- BRILL_MAXW0:85,BRILL_MINW1:45,                           /* Brillante: sin ganar de sobra ni quedar peor */
- SAC_MIN:2,SAC_PV:4,SAC_DEPTH:8,                          /* sacrificio: ≥2 peones, línea ≥4 jugadas, prof. mínima */
- MISS_OPP:10,MISS_W0:55,MISS_SHARE:.5};                   /* Fallo: rival cometió Error+, tenías ventaja y devolviste ≥50% */
-/* Curva de probabilidad: K calibrable (ver "Calibrar curva" en el resumen). */
-const WP_K0=.00368208;
-let WP_K=(()=>{try{const v=+localStorage.getItem("chess_wp_k");return v>0?v:WP_K0}catch(_){return WP_K0}})();
-const wpK=(cp,K)=>50+50*(2/(1+Math.exp(-K*Math.max(-1500,Math.min(1500,cp))))-1);
-const wp=cp=>wpK(cp,WP_K);
+const CL={brill:["!!","#9b6df0","Brillante"],great:["!","#1f78e0","Genial"],best:["★","#2eb82e","Mejor"],exc:["✓","#4cc24a","Excelente"],good:["•","#74c95c","Bien"],inac:["?!","#f2d216","Imprecisión"],mist:["?","#f27d12","Error"],blun:["??","#e5232f","Error grave"]};
+/* Cortes de pérdida en puntos de probabilidad (2 = 0.02 de Expected Points). Mejor tolera el ruido entre búsquedas. */
+const TH={BEST:.3,EXC:2,GOOD:5,INAC:10,MIST:20,
+ ZLOST:30,ZWON:70,          /* zonas: perdido ≤30, ganado ≥70 */
+ /* Genial: cambia el curso si mejora ≥4 puntos de zona; jugada única si la 2ª mejor es ≥15 peor; no en posiciones ya decididas (≥95) */
+ SWING:4,UNIQ:15,GREAT_MINW1:30,GREAT_MAXW0:95,
+ /* Brillante: sacrificio de al menos una pieza (3 peones), línea ≥4 jugadas y prof. ≥8, sin quedar peor (≥45) ni ganar de sobra (<85) */
+ SAC_MIN:3,SAC_PV:4,SAC_DEPTH:8,BRILL_MINW1:45,BRILL_MAXW0:85};
+/* Curva de probabilidad de Lichess (fija): win% = 50 + 50·(2/(1+e^(-0.00368208·cp)) − 1) */
+const WP_K=.00368208;
+const wp=cp=>50+50*(2/(1+Math.exp(-WP_K*Math.max(-1500,Math.min(1500,cp))))-1);
 const accFromLoss=l=>Math.max(0,Math.min(100,103.1668*Math.exp(-.04354*l)-3.1669));
-const accMix=a=>(a.reduce((p,x)=>p+x,0)/a.length+a.length/a.reduce((p,x)=>p+1/Math.max(x,1),0))/2;
-const accK=(mv,K,c)=>{const a=mv.filter(x=>x[2]===c).map(x=>accFromLoss(Math.max(0,c==="w"?wpK(x[0],K)-wpK(x[1],K):wpK(x[1],K)-wpK(x[0],K))));return a.length?accMix(a):null};
-const calGet=()=>{try{return JSON.parse(localStorage.getItem("chess_cal_games")||"[]")}catch(_){return[]}};
-let calMsg="";
-const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun|miss/,REV=/brill|great|miss|inac|mist|blun/,BADGE=/brill|great|miss|inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
+const SF_URL="stockfish/stockfish-19-lite-single.js",BAD=/inac|mist|blun/,REV=/brill|great|inac|mist|blun/,BADGE=/brill|great|inac|mist|blun/,DONE2=e=>!!e&&(e.pass===2||!!e.term);
 const newAn=g=>({g,ply:0,ev:[],cl:[],flip:false,p2:null});
 let an=newAn(null),anW=null,anRun=0,anBack=false,gameBusy=false;
 const anWs=new Set(),pend=new Set();
@@ -11446,19 +11440,16 @@ function isSacrifice(s0,m,e0,e1){
   const o=alt.pv[0]===m.uci?e0.pv:alt.pv;
   return !(o&&o.length&&base-pvSettle(s0,o,m.col,8)>=TH.SAC_MIN)}
  catch(_){return false}}
-const lossOf=(e0,e1,c)=>Math.max(0,c==="w"?wp(e0.cp)-wp(e1.cp):wp(e1.cp)-wp(e0.cp));
 const zoneOf=w=>w<=TH.ZLOST?0:w>=TH.ZWON?2:1;
-function classify(e0,e1,m,s0,rec,prevLoss){const a=wp(e0.cp),b=wp(e1.cp),loss=Math.max(0,m.col==="w"?a-b:b-a);
+function classify(e0,e1,m,s0,rec){const a=wp(e0.cp),b=wp(e1.cp),loss=Math.max(0,m.col==="w"?a-b:b-a);
  let k=(loss<=TH.BEST||e0.bm===m.uci)?"best":loss<=TH.EXC?"exc":loss<=TH.GOOD?"good":loss<=TH.INAC?"inac":loss<=TH.MIST?"mist":"blun";
  const w0=moverWp(e0,m.col),w1=moverWp(e1,m.col),multi=!!s0&&MC.legal(s0).length>1,mated=!!e1.term&&e1.mate===0,top=k==="best"||k==="exc"||k==="good";
- /* Brillante (≤0.02): sacrificio justificado, sin ganar de sobra ni quedar peor; no vale una recaptura ni una jugada forzada. */
+ /* Brillante (≤0.02): buen sacrificio de pieza, sin ganar de sobra ni quedar peor; no vale una recaptura ni una jugada forzada. */
  if((k==="best"||k==="exc")&&multi&&!rec&&w1>=TH.BRILL_MINW1&&w0<TH.BRILL_MAXW0&&isSacrifice(s0,m,e0,e1))k="brill";
- /* Genial (≤0.05): (1) cambia el curso: de perdido a igual o de igual a ganado; (2) o es la jugada única (la 2ª mejor es mucho peor). */
+ /* Genial (≤0.05): cambia el curso (perdido→igual, igual→ganado) o es la jugada única (la 2ª mejor es mucho peor). */
  else if(top&&multi&&!rec&&!mated&&((zoneOf(w1)>zoneOf(w0)&&w1-w0>=TH.SWING)||(k==="best"&&e0.alt&&w1>=TH.GREAT_MINW1&&w0<TH.GREAT_MAXW0&&w0-moverWp(e0.alt,m.col)>=TH.UNIQ)))k="great";
- /* Fallo: el rival cometió un Error o peor, tenías ventaja y la desaprovechas (Imprecisión o Error; si es Error grave se queda como tal). */
- else if((k==="inac"||k==="mist")&&prevLoss>=TH.MISS_OPP&&w0>=TH.MISS_W0&&loss>=prevLoss*TH.MISS_SHARE)k="miss";
  return{k,acc:accFromLoss(loss)}}
-const cls=(A,i)=>{const g=A.g,m=g.moves[i],pm=i>0?g.moves[i-1]:null,rec=!!(pm&&pm.to===m.to&&g.states[i-1].b[pm.to]),pl=pm&&A.ev[i-1]&&A.ev[i]?lossOf(A.ev[i-1],A.ev[i],pm.col):0;return classify(A.ev[i],A.ev[i+1],m,g.states[i],rec,pl)};
+const cls=(A,i)=>{const g=A.g,m=g.moves[i],pm=i>0?g.moves[i-1]:null,rec=!!(pm&&pm.to===m.to&&g.states[i-1].b[pm.to]);return classify(A.ev[i],A.ev[i+1],m,g.states[i],rec)};
 
 async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
  const[ms,dp]=$("anSpeed").value.split(",").map(Number),two=$("anTwo").checked;
@@ -11476,7 +11467,7 @@ async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
    prog(share*(i+1)/N);$("anInfo").textContent="Analizando posición "+(i+1)+" de "+N+(e.depth?" · prof. "+e.depth:"")+"…";anRender()}
   let tail="";
   if(two){
-   /* Segunda pasada: solo las posiciones (antes y después) de imprecisiones, errores, errores graves jugadas brillantes / geniales y fallos (para confirmarlos). */
+   /* Segunda pasada: solo las posiciones (antes y después) de imprecisiones, errores, errores graves jugadas brillantes / geniales (para confirmarlas). */
    const badMoves=[],set=new Set();
    A.cl.forEach((c,i)=>{if(c&&REV.test(c.k)){badMoves.push(i);set.add(i);set.add(i+1)}});
    const list=[...set].sort((a,b)=>a-b).filter(i=>!A.ev[i].term),dp2=dp+6,ms2=ms*3,before=new Map(badMoves.map(i=>[i,A.cl[i].k]));
@@ -11488,7 +11479,7 @@ async function anAnalyze(){anStop();const my=++anRun,A=an,g=A.g;if(!g)return;
      const e=await evalPos(w,g.states[i],dp2,ms2);
      if(my!==anRun)return;
      e.pass=2;e.d1=A.ev[i].depth;A.ev[i]=e;A.p2.done=k+1;
-     for(const j of[i-1,i,i+1])if(before.has(j)&&[j-1,j,j+1].every(q=>q<0||q>=N||!set.has(q)||DONE2(A.ev[q])))A.cl[j]=cls(A,j);
+     for(const j of[i-1,i])if(before.has(j)&&DONE2(A.ev[j])&&DONE2(A.ev[j+1]))A.cl[j]=cls(A,j);
      prog(70+30*(k+1)/list.length);anRender()}
    }catch(e){if(e.cancelled||my!==anRun)throw e;tail=" · la segunda pasada se interrumpió: "+e.message}
    A.p2.changed=badMoves.filter(i=>A.cl[i].k!==before.get(i)).length;
@@ -11689,16 +11680,16 @@ function anRender(){const g=an.g;if(!g)return;const s=g.states[an.ply],last=an.p
  const nm=c=>(g.H[c==="w"?"White":"Black"]||(c==="w"?"Blancas":"Negras")),pl=c=>{const a=accOf(c);return"<b>"+nm(c)+"</b><span>"+(a===null?"":"Precisión "+a.toFixed(1)+"%")+"</span>"};
  $("anTop").innerHTML=pl(an.flip?"w":"b");$("anBot").innerHTML=pl(an.flip?"b":"w");
  let t="";if(last&&cl){t+='<b style="color:'+CL[cl.k][1]+'">'+last.san+" "+CL[cl.k][0]+"</b> "+CL[cl.k][2];const pb=an.ev[an.ply-1]&&an.ev[an.ply-1].bm;
-  if(pb&&pb!==last.uci&&/inac|mist|blun|miss/.test(cl.k))t+=" · mejor era <b>"+pvSan(g.states[an.ply-1],[pb])+"</b>"}
+  if(pb&&pb!==last.uci&&/inac|mist|blun/.test(cl.k))t+=" · mejor era <b>"+pvSan(g.states[an.ply-1],[pb])+"</b>"}
  if(e&&e.pv.length)t+=(t?"<br>":"")+"Línea del motor"+(e.depth?" (prof. "+e.depth+(e.pass===2?" · 2ª pasada":"")+")":"")+": "+pvSan(s,e.pv.slice(0,6));$("anLine").innerHTML=t;deepRender();
  const mv=$("anMoves"),mvTop=mv.scrollTop;mv.innerHTML=g.moves.map((m,i)=>(m.col==="w"||i===0?'<span class="an-n">'+m.n+(m.col==="w"?".":"…")+"</span>":"")+'<button class="an-mv'+(an.ply===i+1?" on":"")+'" data-p="'+(i+1)+'">'+m.san+(an.cl[i]?'<small style="color:'+CL[an.cl[i].k][1]+'">'+CL[an.cl[i].k][0]+"</small>":"")+"</button>").join("")||'<span class="an-info">Sin jugadas (solo posición).</span>';
  mv.scrollTop=mvTop;/* conserva el scroll tras reconstruir la lista */
  {const on=mv.querySelector(".on");if(on){/* solo se mueve el contenedor de jugadas, y solo si la jugada activa queda fuera de vista (sin scrollIntoView: no arrastra la página) */
   const cr=mv.getBoundingClientRect(),or=on.getBoundingClientRect();
   if(or.top<cr.top)mv.scrollTop+=or.top-cr.top-4;else if(or.bottom>cr.bottom)mv.scrollTop+=or.bottom-cr.bottom+4}}
- const S=$("anSum");if(!an.cl.some(Boolean)){S.hidden=true;return}S.hidden=false;const keepW=$("calW")?$("calW").value:"",keepB=$("calB")?$("calB").value:"";
+ const S=$("anSum");if(!an.cl.some(Boolean)){S.hidden=true;return}S.hidden=false;
  const cnt=(c,k)=>an.cl.filter((x,i)=>x&&x.k===k&&g.moves[i].col===c).length,aw=accOf("w"),ab=accOf("b");
- S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()+'<div class="an-info an-cal" style="margin-top:8px">Calibrar curva (K='+WP_K.toFixed(5)+(WP_K===WP_K0?"":" · ajustada")+') · ('+calGet().length+' partidas guardadas, ideal 5–10)<br>Precisión Chess.com: Blancas <input id="calW" inputmode="decimal" value="'+keepW+'"> Negras <input id="calB" inputmode="decimal" value="'+keepB+'"><br><button id="calSave">Guardar partida</button><button id="calFit">Ajustar K</button><button id="calReset">Restablecer</button><div>'+calMsg+"</div></div>"}
+ S.innerHTML='<div class="card-title">Resumen</div><table class="an-tb"><tr><th></th><th>Blancas</th><th>Negras</th></tr><tr><td>Precisión</td><td><b>'+(aw===null?"–":aw.toFixed(1)+"%")+"</b></td><td><b>"+(ab===null?"–":ab.toFixed(1)+"%")+"</b></td></tr>"+Object.keys(CL).map(k=>'<tr><td style="color:'+CL[k][1]+'">'+CL[k][0]+" "+CL[k][2]+"</td><td>"+cnt("w",k)+"</td><td>"+cnt("b",k)+"</td></tr>").join("")+"</table>"+depthNote()}
 const go=p=>{if(!an.g)return;const np=Math.max(0,Math.min(an.g.moves.length,p)),ch=np!==an.ply;an.ply=np;if(ch)autoKick();anRender()};
 function anLoad(txt,auto){try{const g=loadText(txt);anStop();an=newAn(g);setWarn(g.warn);
  $("anErr").textContent="";$("anLoad").hidden=true;$("anProg").style.width="0";$("anInfo").textContent="Listo para analizar.";anRender();if(auto)anAnalyze();else autoKick()}
@@ -11730,20 +11721,6 @@ const closeResult=()=>{resultOverlay.style.display="none"};
 $("resultClose").onclick=closeResult;
 resultOverlay.addEventListener("click",e=>{if(e.target===resultOverlay)closeResult()});
 $("startAnalyze").onclick=()=>anOpen("",false);
-/* Calibración de la curva wp contra partidas revisadas en Chess.com */
-const reclass=()=>{an.cl=an.g.moves.map((_,i)=>an.ev[i]&&an.ev[i+1]?cls(an,i):undefined)};
-$("anSum").addEventListener("click",e=>{const id=e.target.id;if(!/^cal(Save|Fit|Reset)$/.test(id))return;
- if(id==="calSave"){const gv=x=>{const v=parseFloat(String($(x).value).replace(",","."));return v>=0&&v<=100?v:null},w=gv("calW"),b=gv("calB");
-  const mv=[];an.g.moves.forEach((m,i)=>{if(an.ev[i]&&an.ev[i+1])mv.push([Math.round(an.ev[i].cp),Math.round(an.ev[i+1].cp),m.col])});
-  if(w===null&&b===null)calMsg="Escribe al menos una precisión (0–100) de Chess.com.";
-  else if(!mv.length)calMsg="Primero analiza la partida.";
-  else{const G=calGet();G.push({w,b,mv});try{localStorage.setItem("chess_cal_games",JSON.stringify(G.slice(-20)));calMsg="Partida guardada ✓"}catch(_){calMsg="No se pudo guardar."}}}
- else if(id==="calReset"){WP_K=WP_K0;try{localStorage.removeItem("chess_wp_k");localStorage.removeItem("chess_cal_games")}catch(_){}calMsg="Curva y partidas restablecidas.";reclass()}
- else{const G=calGet();let best=null;
-  for(let K=.0015;K<=.00701;K+=.00005){let er=0,n=0;for(const g of G)for(const c of["w","b"]){const t=g[c];if(t==null)continue;const v=accK(g.mv,K,c);if(v===null)continue;er+=(v-t)**2;n++}if(n&&(!best||er<best.er))best={K,er,n}}
-  if(!best)calMsg="Guarda al menos una partida con su precisión de Chess.com.";
-  else{WP_K=best.K;try{localStorage.setItem("chess_wp_k",String(WP_K))}catch(_){}reclass();calMsg="K ajustada a "+WP_K.toFixed(5)+" · error medio ±"+Math.sqrt(best.er/best.n).toFixed(1)+" pts de precisión ("+best.n+" lados)"}}
- anRender()});
 })();
 </script>
 
